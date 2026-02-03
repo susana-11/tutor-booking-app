@@ -29,6 +29,18 @@ class PaymentService {
       }
 
       console.log('👤 Student ID:', booking.studentId?._id, 'Expected:', userId);
+      console.log('📧 Student email:', booking.studentId?.email);
+      console.log('📧 Student email type:', typeof booking.studentId?.email);
+      
+      if (!booking.studentId) {
+        console.error('❌ Student not found in booking');
+        return { success: false, error: 'Student information not found' };
+      }
+      
+      if (!booking.studentId.email) {
+        console.error('❌ Student email not found');
+        return { success: false, error: 'Student email not found' };
+      }
       
       if (booking.studentId._id.toString() !== userId.toString()) {
         return { success: false, error: 'Unauthorized' };
@@ -41,12 +53,19 @@ class PaymentService {
       // Generate transaction reference
       const txRef = chapaService.generateTxRef('booking');
 
+      // Ensure email is a string
+      const studentEmail = String(booking.studentId.email).trim();
+      const studentFirstName = String(booking.studentId.firstName || 'Student').trim();
+      const studentLastName = String(booking.studentId.lastName || '').trim();
+
+      console.log('📧 Sending to Chapa - Email:', studentEmail, 'Name:', studentFirstName, studentLastName);
+
       // Initialize Chapa payment
       const result = await chapaService.initializePayment({
         amount: booking.totalAmount,
-        email: booking.studentId.email,
-        firstName: booking.studentId.firstName,
-        lastName: booking.studentId.lastName,
+        email: studentEmail,
+        firstName: studentFirstName,
+        lastName: studentLastName,
         txRef,
         bookingId: booking._id.toString(),
         customization: {
