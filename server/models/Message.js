@@ -45,7 +45,7 @@ const messageSchema = new mongoose.Schema({
   
   type: {
     type: String,
-    enum: ['text', 'image', 'document', 'audio', 'video', 'voice', 'system', 'booking', 'payment'],
+    enum: ['text', 'image', 'document', 'audio', 'video', 'voice', 'system', 'booking', 'payment', 'call'],
     default: 'text'
   },
   
@@ -102,6 +102,21 @@ const messageSchema = new mongoose.Schema({
   // System message data
   systemData: {
     type: mongoose.Schema.Types.Mixed
+  },
+  
+  // Call data
+  callData: {
+    callId: String,
+    callType: {
+      type: String,
+      enum: ['voice', 'video']
+    },
+    status: {
+      type: String,
+      enum: ['initiated', 'answered', 'declined', 'missed', 'ended']
+    },
+    duration: Number, // Duration in seconds
+    endedBy: String // 'initiator' or 'receiver'
   },
   
   // Booking/Payment related data

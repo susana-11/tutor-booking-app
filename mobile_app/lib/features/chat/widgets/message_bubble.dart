@@ -180,6 +180,8 @@ class MessageBubble extends StatelessWidget {
         return _buildBookingContent();
       case MessageType.payment:
         return _buildPaymentContent();
+      case MessageType.call:
+        return _buildCallContent();
       default:
         return _buildTextContent();
     }
@@ -196,6 +198,15 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildImageContent() {
+    // Get image URL and convert to absolute URL
+    final imageUrl = message.attachments.isNotEmpty 
+        ? message.attachments.first.url 
+        : '';
+    
+    final fullImageUrl = imageUrl.startsWith('http') 
+        ? imageUrl 
+        : 'https://tutor-app-backend-wtru.onrender.com$imageUrl';
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -203,16 +214,43 @@ class MessageBubble extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: Image.network(
-              message.attachments.first.url,
+              fullImageUrl,
               width: 200,
               height: 200,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                width: 200,
-                height: 200,
-                color: Colors.grey[300],
-                child: const Icon(Icons.broken_image, size: 50),
-              ),
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  width: 200,
+                  height: 200,
+                  color: Colors.grey[300],
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                          : null,
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                print('❌ Image load error: $error');
+                print('❌ Image URL: $fullImageUrl');
+                return Container(
+                  width: 200,
+                  height: 200,
+                  color: Colors.grey[300],
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.broken_image, size: 50),
+                      SizedBox(height: 8),
+                      Text('Failed to load image', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         if (message.content.isNotEmpty) ...[
@@ -290,6 +328,11 @@ class MessageBubble extends StatelessWidget {
         ? message.attachments.first.url 
         : '';
     
+    // Convert relative URL to absolute URL
+    final fullAudioUrl = audioUrl.startsWith('http') 
+        ? audioUrl 
+        : 'https://tutor-app-backend-wtru.onrender.com$audioUrl';
+    
     final duration = message.attachments.isNotEmpty && message.attachments.first.duration != null
         ? Duration(seconds: message.attachments.first.duration!)
         : null;
@@ -305,7 +348,7 @@ class MessageBubble extends StatelessWidget {
     }
 
     return VoiceMessagePlayer(
-      audioUrl: audioUrl,
+      audioUrl: fullAudioUrl,
       isSentByMe: isMe,
       duration: duration,
     );
@@ -465,6 +508,95 @@ class MessageBubble extends StatelessWidget {
           Text(
             message.content,
             style: const TextStyle(fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCallContent() {
+    final callData = message.callData;
+    if (callData == null) return _buildTextContent();
+
+    final callType = callData['callType'] ?? 'voice';
+    final status = callData['status'] ?? 'ended';
+    final duration = callData['duration'];
+
+    // Determine icon and color based on call type and status
+    IconData icon;
+    Color color;
+    String statusText;
+
+    if (callType == 'video') {
+      icon = Icons.videocam;
+    } else {
+      icon = Icons.call;
+    }
+
+    switch (status) {
+      case 'declined':
+        color = Colors.red;
+        statusText = 'Declined';
+        icon = Icons.call_end;
+        break;
+      case 'missed':
+        color = Colors.orange;
+        statusText = 'Missed';
+        icon = Icons.phone_missed;
+        break;
+      case 'ended':
+        color = Colors.green;
+        if (duration != null && duration > 0) {
+          final minutes = duration ~/ 60;
+          final seconds = duration % 60;
+          statusText = '${minutes}:${seconds.toString().padLeft(2, '0')}';
+        } else {
+          statusText = 'Ended';
+        }
+        break;
+      default:
+        color = Colors.blue;
+        statusText = 'Call';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                callType == 'video' ? 'Video Call' : 'Voice Call',
+                style: TextStyle(
+                  color: isMe ? Colors.white : Colors.black87,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                statusText,
+                style: TextStyle(
+                  color: isMe ? Colors.white70 : Colors.grey[600],
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ),
         ],
       ),

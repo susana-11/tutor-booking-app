@@ -115,6 +115,7 @@ class Message {
   final DateTime? editedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final Map<String, dynamic>? callData; // Call information
 
   const Message({
     required this.id,
@@ -131,6 +132,7 @@ class Message {
     this.editedAt,
     required this.createdAt,
     required this.updatedAt,
+    this.callData,
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -161,6 +163,7 @@ class Message {
           : null,
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),
+      callData: json['callData'],
     );
   }
 
@@ -314,6 +317,7 @@ enum MessageType {
   system,
   booking,
   payment,
+  call,
 }
 
 enum MessageStatus {
