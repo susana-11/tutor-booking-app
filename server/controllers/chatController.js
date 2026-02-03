@@ -290,10 +290,17 @@ exports.sendMessage = async (req, res) => {
     try {
       const io = req.app.get('io');
       if (io) {
+        // Populate conversation participants if not already populated
+        if (!conversation.populated('participants.userId')) {
+          await conversation.populate('participants.userId', '_id firstName lastName');
+        }
+        
         // Get other participant
         const otherParticipant = conversation.getOtherParticipant(userId);
         if (otherParticipant && otherParticipant.userId) {
-          const recipientId = otherParticipant.userId._id.toString();
+          const recipientId = otherParticipant.userId._id ? 
+            otherParticipant.userId._id.toString() : 
+            otherParticipant.userId.toString();
           
           // Emit to recipient's room
           io.to(`user_${recipientId}`).emit('new_message', formattedMessage);
