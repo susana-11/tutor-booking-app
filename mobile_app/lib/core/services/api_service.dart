@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
 import '../config/app_config.dart';
@@ -25,6 +26,18 @@ class ApiService {
         'Accept': 'application/json',
       },
     ));
+
+    // Allow self-signed certificates in development
+    if (kDebugMode) {
+      (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+        final client = HttpClient();
+        client.badCertificateCallback = (X509Certificate cert, String host, int port) {
+          print('🔓 Allowing certificate for $host:$port');
+          return true; // Allow all certificates in debug mode
+        };
+        return client;
+      };
+    }
 
     // Add interceptors
     _dio.interceptors.add(_AuthInterceptor());
