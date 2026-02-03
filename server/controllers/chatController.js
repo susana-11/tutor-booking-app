@@ -286,6 +286,31 @@ exports.sendMessage = async (req, res) => {
       updatedAt: message.updatedAt
     };
 
+    // ✅ EMIT SOCKET EVENT TO OTHER PARTICIPANTS
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        // Get other participant
+        const otherParticipant = conversation.getOtherParticipant(userId);
+        if (otherParticipant && otherParticipant.userId) {
+          const recipientId = otherParticipant.userId._id.toString();
+          
+          // Emit to recipient's room
+          io.to(`user_${recipientId}`).emit('new_message', formattedMessage);
+          console.log(`💬 Socket event emitted to user_${recipientId}`);
+          
+          // Also emit to conversation room
+          io.to(`chat_${conversationId}`).emit('new_message', formattedMessage);
+          console.log(`💬 Socket event emitted to chat_${conversationId}`);
+        }
+      } else {
+        console.warn('⚠️ Socket.IO not available, message sent via HTTP only');
+      }
+    } catch (socketError) {
+      console.error('❌ Socket emit error:', socketError);
+      // Don't fail the request if socket emit fails
+    }
+
     res.status(201).json({
       success: true,
       message: 'Message sent successfully',

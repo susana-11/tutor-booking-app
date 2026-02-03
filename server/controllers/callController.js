@@ -138,18 +138,25 @@ exports.initiateCall = async (req, res) => {
     // Send call notification via Socket.IO
     const io = req.app.get('io');
     if (io) {
-      io.to(receiverId).emit('incoming_call', {
+      const incomingCallData = {
         callId: call.callId,
         channelName: call.channelName,
         callType: call.callType,
         initiator: {
-          id: req.user.userId,
+          id: initiatorId,
           name: `${req.user.firstName} ${req.user.lastName}`,
           avatar: req.user.profilePicture
         },
         token: receiverToken,
         uid: receiverUid
-      });
+      };
+      
+      // Emit to receiver's user room
+      io.to(`user_${receiverId}`).emit('incoming_call', incomingCallData);
+      console.log(`📞 Incoming call event emitted to user_${receiverId}`);
+      console.log(`📞 Call data:`, JSON.stringify(incomingCallData, null, 2));
+    } else {
+      console.error('❌ Socket.IO not available - call notification not sent!');
     }
 
     console.log(`📞 Call initiated: ${callType} call from ${initiatorId} to ${receiverId}`);
