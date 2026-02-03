@@ -234,8 +234,13 @@ exports.endCall = async (req, res) => {
       });
     }
 
-    // Verify user is part of the call
-    if (call.initiatorId.toString() !== userId && call.receiverId.toString() !== userId) {
+    // Verify user is part of the call (convert both to strings for comparison)
+    const initiatorIdStr = call.initiatorId.toString();
+    const receiverIdStr = call.receiverId.toString();
+    const userIdStr = userId.toString();
+
+    if (initiatorIdStr !== userIdStr && receiverIdStr !== userIdStr) {
+      console.log(`❌ Authorization failed: userId=${userIdStr}, initiatorId=${initiatorIdStr}, receiverId=${receiverIdStr}`);
       return res.status(403).json({
         success: false,
         message: 'Not authorized to end this call'
@@ -252,9 +257,9 @@ exports.endCall = async (req, res) => {
     // Notify other participant via Socket.IO
     const io = req.app.get('io');
     if (io) {
-      const otherUserId = call.initiatorId.toString() === userId 
-        ? call.receiverId.toString() 
-        : call.initiatorId.toString();
+      const otherUserId = initiatorIdStr === userIdStr 
+        ? receiverIdStr 
+        : initiatorIdStr;
       
       io.to(otherUserId).emit('call_ended', {
         callId: call.callId,

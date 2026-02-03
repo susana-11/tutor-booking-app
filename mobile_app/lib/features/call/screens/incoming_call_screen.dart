@@ -50,12 +50,16 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
         final callSession = widget.incomingCall.toCallSession();
 
         if (mounted) {
+          // Use pushReplacement with no animation to avoid Hero conflicts
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (context) => widget.incomingCall.callType == CallType.video
-                  ? VideoCallScreen(callSession: callSession)
-                  : VoiceCallScreen(callSession: callSession),
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  widget.incomingCall.callType == CallType.video
+                      ? VideoCallScreen(callSession: callSession)
+                      : VoiceCallScreen(callSession: callSession),
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
             ),
           );
         }

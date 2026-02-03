@@ -122,12 +122,13 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       await _agoraService.leaveChannel();
       await _callService.endCall(widget.callSession.callId);
       if (mounted) {
-        Navigator.pop(context);
+        // Use pop with no animation to avoid Hero conflicts
+        Navigator.of(context).pop();
       }
     } catch (e) {
       print('❌ Error ending call: $e');
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.of(context).pop();
       }
     }
   }
