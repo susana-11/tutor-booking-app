@@ -1,0 +1,47 @@
+===========================================
+  GITHUB PUSH COMMANDS
+===========================================
+
+Your code is committed locally. Now push to GitHub:
+
+STEP 1: Create repository on GitHub.com
+----------------------------------------
+1. Go to: https://github.com
+2. Click "+" → "New repository"
+3. Name: tutor-booking-app
+4. Keep Private (recommended)
+5. DO NOT initialize with README
+6. Click "Create repository"
+
+
+STEP 2: Push your code
+----------------------------------------
+Run these commands (replace YOUR_USERNAME with your GitHub username):
+
+git remote add origin https://github.com/YOUR_USERNAME/tutor-booking-app.git
+git branch -M main
+git push -u origin main
+
+
+STEP 3: Go to Render.com
+----------------------------------------
+1. Visit: https://render.com
+2. Sign up with GitHub
+3. Follow: 🚀_RENDER_DEPLOYMENT_STEPS.md
+
+
+===========================================
+  QUICK REFERENCE
+===========================================
+
+Your local Git is ready:
+✅ Repository initialized
+✅ All files committed
+✅ Ready to push
+
+Next steps:
+1. Create GitHub repository
+2. Push code (commands above)
+3. Deploy on Render.com
+
+Full guide: 🚀_RENDER_DEPLOYMENT_STEPS.md

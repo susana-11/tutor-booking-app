@@ -51,13 +51,20 @@ class ApiService {
     Options? options,
   }) async {
     try {
+      print('🌐 GET Request: ${AppConfig.instance.baseUrl}$endpoint');
+      print('🌐 Query params: $queryParameters');
+      
       final response = await _dio.get(
         endpoint,
         queryParameters: queryParameters,
         options: options,
       );
+      
+      print('✅ GET Response received: ${response.statusCode}');
       return ApiResponse<T>.fromResponse(response);
     } catch (e) {
+      print('❌ GET Request failed: $e');
+      print('❌ Error type: ${e.runtimeType}');
       return ApiResponse<T>.error(_handleError(e));
     }
   }
@@ -70,14 +77,21 @@ class ApiService {
     Options? options,
   }) async {
     try {
+      print('🌐 POST Request: ${AppConfig.instance.baseUrl}$endpoint');
+      print('🌐 Data: $data');
+      
       final response = await _dio.post(
         endpoint,
         data: data,
         queryParameters: queryParameters,
         options: options,
       );
+      
+      print('✅ POST Response received: ${response.statusCode}');
       return ApiResponse<T>.fromResponse(response);
     } catch (e) {
+      print('❌ POST Request failed: $e');
+      print('❌ Error type: ${e.runtimeType}');
       return ApiResponse<T>.error(_handleError(e));
     }
   }

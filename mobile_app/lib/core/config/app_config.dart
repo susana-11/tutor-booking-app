@@ -5,10 +5,13 @@ class AppConfig {
   static AppConfig get instance => _instance;
 
   // API Configuration
-  // Use 10.0.2.2 for Android emulator to reach host machine
-  // Use 192.168.1.5 for physical devices on local network
-  static const String _baseUrlDev = 'http://192.168.1.5:5000/api';
-  static const String _baseUrlProd = 'https://your-api-domain.com/api';
+  // Cloud server (Render deployment)
+  static const String _baseUrlProd = 'https://tutor-app-backend-wtru.onrender.com/api';
+  static const String _baseUrlDev = 'https://tutor-app-backend-wtru.onrender.com/api';
+  
+  // Local network testing - Uncomment to use local server
+  // static const String _baseUrlDev = 'http://192.168.1.5:5000/api';
+  // static const String _baseUrlProd = 'http://192.168.1.5:5000/api';
   
   String get baseUrl => kDebugMode ? _baseUrlDev : _baseUrlProd;
   
@@ -80,10 +83,10 @@ class AppConfig {
   bool get enableLogging => kDebugMode;
   bool get enableCrashReporting => !kDebugMode;
   
-  // API Timeouts (in seconds)
-  int get connectTimeout => 30;
-  int get receiveTimeout => 30;
-  int get sendTimeout => 30;
+  // API Timeouts (in seconds) - Increased for Render free tier wake-up time
+  int get connectTimeout => 90;
+  int get receiveTimeout => 90;
+  int get sendTimeout => 90;
   
   // Retry configuration
   int get maxRetryAttempts => 3;
