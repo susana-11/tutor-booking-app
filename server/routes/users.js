@@ -1,33 +1,21 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
 const { authenticate } = require('../middleware/auth');
+const { profileStorage } = require('../config/cloudinary');
 
 const router = express.Router();
 
-// Configure multer for profile picture uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/profiles/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'profile-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
+// Configure multer to use Cloudinary storage for profile pictures
 const upload = multer({
-  storage: storage,
+  storage: profileStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     
-    if (extname && mimetype) {
+    if (allowedMimes.includes(file.mimetype)) {
       return cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed (jpeg, jpg, png, gif)'));
+      cb(new Error('Only image files are allowed (jpeg, jpg, png, gif, webp)'));
     }
   }
 });
@@ -108,7 +96,8 @@ router.post('/profile/picture', authenticate, upload.single('profilePicture'), a
     }
 
     const User = require('../models/User');
-    const profilePictureUrl = `/uploads/profiles/${req.file.filename}`;
+    // Cloudinary returns the full URL in req.file.path
+    const profilePictureUrl = req.file.path;
 
     const user = await User.findByIdAndUpdate(
       req.user.userId,
