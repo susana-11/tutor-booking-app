@@ -290,32 +290,46 @@ exports.sendMessage = async (req, res) => {
     try {
       const io = req.app.get('io');
       if (io) {
-        // Populate conversation participants if not already populated
-        if (!conversation.populated('participants.userId')) {
-          await conversation.populate('participants.userId', '_id firstName lastName');
-        }
+        console.log(`💬 Attempting to emit socket event for conversation: ${conversationId}`);
+        console.log(`💬 Current user ID: ${userId}`);
+        console.log(`💬 Conversation participants:`, conversation.participants.map(p => ({
+          userId: p.userId._id || p.userId,
+          role: p.role
+        })));
         
-        // Get other participant
-        const otherParticipant = conversation.getOtherParticipant(userId);
-        if (otherParticipant && otherParticipant.userId) {
-          const recipientId = otherParticipant.userId._id ? 
-            otherParticipant.userId._id.toString() : 
-            otherParticipant.userId.toString();
+        // Find the other participant (not the sender)
+        const recipientParticipant = conversation.participants.find(p => {
+          const participantId = p.userId._id ? p.userId._id.toString() : p.userId.toString();
+          const currentUserId = userId.toString();
+          console.log(`💬 Comparing: ${participantId} !== ${currentUserId}`);
+          return participantId !== currentUserId;
+        });
+        
+        if (recipientParticipant) {
+          const recipientId = recipientParticipant.userId._id 
+            ? recipientParticipant.userId._id.toString() 
+            : recipientParticipant.userId.toString();
+          
+          console.log(`💬 Found recipient: ${recipientId}`);
+          console.log(`💬 Emitting to room: user_${recipientId}`);
           
           // Emit to recipient's room
           io.to(`user_${recipientId}`).emit('new_message', formattedMessage);
-          console.log(`💬 Socket event emitted to user_${recipientId}`);
+          console.log(`✅ Socket event emitted to user_${recipientId}`);
           
           // Also emit to conversation room
           io.to(`chat_${conversationId}`).emit('new_message', formattedMessage);
-          console.log(`💬 Socket event emitted to chat_${conversationId}`);
+          console.log(`✅ Socket event emitted to chat_${conversationId}`);
+        } else {
+          console.error(`❌ Could not find recipient in conversation ${conversationId}`);
+          console.error(`❌ Participants:`, JSON.stringify(conversation.participants, null, 2));
         }
       } else {
-        console.warn('⚠️ Socket.IO not available, message sent via HTTP only');
+        console.error('❌ Socket.IO not available!');
       }
     } catch (socketError) {
       console.error('❌ Socket emit error:', socketError);
-      // Don't fail the request if socket emit fails
+      console.error('❌ Error stack:', socketError.stack);
     }
 
     res.status(201).json({
