@@ -65,9 +65,19 @@ class ChapaService {
       }
     } catch (error) {
       console.error('Chapa initialization error:', error.response?.data || error.message);
+      
+      // Check if it's an email validation error
+      const errorData = error.response?.data;
+      if (errorData?.message?.email) {
+        return {
+          success: false,
+          error: 'Invalid email address. Please use a real email address (not @example.com or test emails). Chapa requires valid email domains for payment processing.'
+        };
+      }
+      
       return {
         success: false,
-        error: error.response?.data?.message || error.message || 'Payment initialization failed'
+        error: errorData?.message || error.message || 'Payment initialization failed'
       };
     }
   }
