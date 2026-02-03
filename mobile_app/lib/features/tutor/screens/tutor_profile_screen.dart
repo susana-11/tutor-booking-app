@@ -213,7 +213,7 @@ class _TutorProfileScreenState extends State<TutorProfileScreen> {
                               radius: 50,
                               backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
                               backgroundImage: profilePicture != null && profilePicture.isNotEmpty
-                                  ? NetworkImage('http://10.0.2.2:5000$profilePicture')
+                                  ? NetworkImage(profilePicture)
                                   : null,
                               onBackgroundImageError: profilePicture != null
                                   ? (exception, stackTrace) {

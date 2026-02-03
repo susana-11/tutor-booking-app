@@ -86,7 +86,11 @@ conversationSchema.methods.getParticipant = function(userId) {
 };
 
 conversationSchema.methods.getOtherParticipant = function(userId) {
-  return this.participants.find(p => p.userId.toString() !== userId.toString());
+  const userIdStr = userId.toString();
+  return this.participants.find(p => {
+    const participantIdStr = p.userId._id ? p.userId._id.toString() : p.userId.toString();
+    return participantIdStr !== userIdStr;
+  });
 };
 
 conversationSchema.methods.updateLastActivity = function() {
