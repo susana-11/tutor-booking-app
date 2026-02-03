@@ -1,0 +1,361 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+import '../config/app_config.dart';
+import 'storage_service.dart';
+
+class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  static const String _channelId = 'tutor_booking_notifications';
+  static const String _channelName = 'Tutor Booking Notifications';
+  static const String _channelDescription = 'Notifications for booking updates, reminders, and messages';
+
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  FirebaseMessaging? _firebaseMessaging;
+
+  static Future<void> initialize() async {
+    if (!AppConfig.enablePushNotifications) return;
+
+    final instance = NotificationService();
+    await instance._initializeLocalNotifications();
+    await instance._initializeFirebaseMessaging();
+  }
+
+  Future<void> _initializeLocalNotifications() async {
+    // Android initialization
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    
+    // iOS initialization
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+
+    const initializationSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _localNotifications.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: _onNotificationTapped,
+    );
+
+    // Create notification channel for Android
+    const androidChannel = AndroidNotificationChannel(
+      _channelId,
+      _channelName,
+      description: _channelDescription,
+      importance: Importance.high,
+      playSound: true,
+    );
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(androidChannel);
+  }
+
+  Future<void> _initializeFirebaseMessaging() async {
+    try {
+      _firebaseMessaging = FirebaseMessaging.instance;
+
+      // Request permission
+      await _requestNotificationPermission();
+
+      // Get FCM token
+      final token = await _firebaseMessaging!.getToken();
+      if (token != null) {
+        await StorageService.setString('fcm_token', token);
+        if (kDebugMode) {
+          print('FCM Token: $token');
+        }
+      }
+
+      // Handle token refresh
+      _firebaseMessaging!.onTokenRefresh.listen((token) {
+        StorageService.setString('fcm_token', token);
+        // Send token to server
+        _sendTokenToServer(token);
+      });
+
+      // Handle foreground messages
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+      // Handle background messages
+      FirebaseMessaging.onBackgroundMessage(_handleBackgroundMessage);
+
+      // Handle notification taps when app is in background
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+
+      // Handle notification tap when app is terminated
+      final initialMessage = await _firebaseMessaging!.getInitialMessage();
+      if (initialMessage != null) {
+        _handleNotificationTap(initialMessage);
+      }
+
+    } catch (e) {
+      if (kDebugMode) {
+        print('Firebase Messaging initialization failed: $e');
+      }
+    }
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    // Request permission for notifications
+    final status = await Permission.notification.request();
+    
+    if (status.isGranted) {
+      // Request Firebase Messaging permission
+      final settings = await _firebaseMessaging!.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+
+      if (kDebugMode) {
+        print('Notification permission: ${settings.authorizationStatus}');
+      }
+    }
+  }
+
+  // Show local notification
+  Future<void> showLocalNotification({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+    NotificationPriority priority = NotificationPriority.defaultPriority,
+  }) async {
+    final androidDetails = AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    final notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _localNotifications.show(
+      id,
+      title,
+      body,
+      notificationDetails,
+      payload: payload,
+    );
+  }
+
+  // Schedule notification
+  Future<void> scheduleNotification({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime scheduledDate,
+    String? payload,
+  }) async {
+    final androidDetails = AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+
+    const iosDetails = DarwinNotificationDetails();
+
+    final notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _localNotifications.zonedSchedule(
+      id,
+      title,
+      body,
+      scheduledDate,
+      notificationDetails,
+      payload: payload,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  // Cancel notification
+  Future<void> cancelNotification(int id) async {
+    await _localNotifications.cancel(id);
+  }
+
+  // Cancel all notifications
+  Future<void> cancelAllNotifications() async {
+    await _localNotifications.cancelAll();
+  }
+
+  // Get pending notifications
+  Future<List<PendingNotificationRequest>> getPendingNotifications() async {
+    return await _localNotifications.pendingNotificationRequests();
+  }
+
+  // Handle foreground messages
+  void _handleForegroundMessage(RemoteMessage message) {
+    if (kDebugMode) {
+      print('Foreground message: ${message.messageId}');
+    }
+
+    // Show local notification for foreground messages
+    showLocalNotification(
+      id: message.hashCode,
+      title: message.notification?.title ?? 'New Notification',
+      body: message.notification?.body ?? '',
+      payload: message.data.toString(),
+    );
+  }
+
+  // Handle notification tap
+  void _handleNotificationTap(RemoteMessage message) {
+    if (kDebugMode) {
+      print('Notification tapped: ${message.data}');
+    }
+
+    // Navigate based on notification data
+    _navigateFromNotification(message.data);
+  }
+
+  // Handle local notification tap
+  void _onNotificationTapped(NotificationResponse response) {
+    if (kDebugMode) {
+      print('Local notification tapped: ${response.payload}');
+    }
+
+    if (response.payload != null) {
+      // Parse payload and navigate
+      // You can implement navigation logic here
+    }
+  }
+
+  // Navigate based on notification data
+  void _navigateFromNotification(Map<String, dynamic> data) {
+    final type = data['type'];
+    final id = data['id'];
+
+    switch (type) {
+      case 'booking_reminder':
+        // Navigate to booking details
+        break;
+      case 'chat_message':
+        // Navigate to chat
+        break;
+      case 'session_update':
+        // Navigate to session details
+        break;
+      default:
+        // Navigate to home
+        break;
+    }
+  }
+
+  // Send FCM token to server
+  Future<void> _sendTokenToServer(String token) async {
+    try {
+      // Implement API call to send token to server
+      // This will be used for sending targeted notifications
+    } catch (e) {
+      if (kDebugMode) {
+        print('Failed to send FCM token to server: $e');
+      }
+    }
+  }
+
+  // Get FCM token
+  Future<String?> getFCMToken() async {
+    if (_firebaseMessaging != null) {
+      return await _firebaseMessaging!.getToken();
+    }
+    return null;
+  }
+
+  // Subscribe to topic
+  Future<void> subscribeToTopic(String topic) async {
+    if (_firebaseMessaging != null) {
+      await _firebaseMessaging!.subscribeToTopic(topic);
+    }
+  }
+
+  // Unsubscribe from topic
+  Future<void> unsubscribeFromTopic(String topic) async {
+    if (_firebaseMessaging != null) {
+      await _firebaseMessaging!.unsubscribeFromTopic(topic);
+    }
+  }
+
+  // Notification types for easy management
+  static const int bookingReminderNotificationId = 1000;
+  static const int sessionStartNotificationId = 2000;
+  static const int chatMessageNotificationId = 3000;
+  static const int paymentNotificationId = 4000;
+
+  // Helper methods for specific notification types
+  Future<void> showBookingReminder({
+    required String tutorName,
+    required String subject,
+    required DateTime sessionTime,
+    required String bookingId,
+  }) async {
+    await showLocalNotification(
+      id: bookingReminderNotificationId + bookingId.hashCode,
+      title: 'Session Reminder',
+      body: 'Your $subject session with $tutorName starts in 1 hour',
+      payload: 'booking_reminder:$bookingId',
+    );
+  }
+
+  Future<void> showChatMessage({
+    required String senderName,
+    required String message,
+    required String chatId,
+  }) async {
+    await showLocalNotification(
+      id: chatMessageNotificationId + chatId.hashCode,
+      title: 'New message from $senderName',
+      body: message,
+      payload: 'chat_message:$chatId',
+    );
+  }
+
+  Future<void> showSessionUpdate({
+    required String title,
+    required String message,
+    required String sessionId,
+  }) async {
+    await showLocalNotification(
+      id: sessionStartNotificationId + sessionId.hashCode,
+      title: title,
+      body: message,
+      payload: 'session_update:$sessionId',
+    );
+  }
+}
+
+// Background message handler (must be top-level function)
+@pragma('vm:entry-point')
+Future<void> _handleBackgroundMessage(RemoteMessage message) async {
+  if (kDebugMode) {
+    print('Background message: ${message.messageId}');
+  }
+}

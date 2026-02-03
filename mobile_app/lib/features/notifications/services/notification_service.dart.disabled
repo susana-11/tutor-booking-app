@@ -1,0 +1,371 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/material.dart';
+import '../../../core/services/api_service.dart';
+import '../../../core/services/storage_service.dart';
+import '../models/notification_model.dart';
+
+// Background message handler (must be top-level function)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  print('📬 Background message: ${message.messageId}');
+  print('   Title: ${message.notification?.title}');
+  print('   Body: ${message.notification?.body}');
+}
+
+class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+  final ApiService _apiService = ApiService();
+
+  bool _initialized = false;
+  String? _fcmToken;
+  Function(NotificationModel)? _onNotificationReceived;
+  Function(String)? _onNotificationTapped;
+
+  // Initialize notification service
+  Future<void> initialize({
+    Function(NotificationModel)? onNotificationReceived,
+    Function(String)? onNotificationTapped,
+  }) async {
+    if (_initialized) return;
+
+    _onNotificationReceived = onNotificationReceived;
+    _onNotificationTapped = onNotificationTapped;
+
+    try {
+      // Initialize local notifications
+      await _initializeLocalNotifications();
+
+      // Request permission
+      final settings = await _fcm.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        print('✅ Notification permission granted');
+
+        // Get FCM token
+        _fcmToken = await _fcm.getToken();
+        if (_fcmToken != null) {
+          print('📱 FCM Token: ${_fcmToken!.substring(0, 20)}...');
+          await _registerToken(_fcmToken!);
+        }
+
+        // Listen for token refresh
+        _fcm.onTokenRefresh.listen((token) {
+          _fcmToken = token;
+          _registerToken(token);
+        });
+
+        // Handle foreground messages
+        FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+        // Handle background messages
+        FirebaseMessaging.onBackgroundMessage(
+            _firebaseMessagingBackgroundHandler);
+
+        // Handle notification taps
+        FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+
+        // Check if app was opened from notification
+        final initialMessage = await _fcm.getInitialMessage();
+        if (initialMessage != null) {
+          _handleNotificationTap(initialMessage);
+        }
+
+        _initialized = true;
+        print('✅ Notification service initialized');
+      } else {
+        print('⚠️  Notification permission denied');
+      }
+    } catch (e) {
+      print('❌ Notification initialization error: $e');
+    }
+  }
+
+  // Initialize local notifications
+  Future<void> _initializeLocalNotifications() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    const settings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _localNotifications.initialize(
+      settings,
+      onDidReceiveNotificationResponse: _onLocalNotificationTap,
+    );
+
+    // Create notification channel for Android
+    if (Platform.isAndroid) {
+      const channel = AndroidNotificationChannel(
+        'default',
+        'Default Notifications',
+        description: 'General notifications',
+        importance: Importance.high,
+      );
+
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+    }
+  }
+
+  // Register FCM token with backend
+  Future<void> _registerToken(String token) async {
+    try {
+      final userData = await StorageService.getUserData();
+      if (userData == null) return;
+
+      await _apiService.post(
+        '/notifications/device-token',
+        data: {
+          'token': token,
+          'platform': Platform.isAndroid ? 'android' : 'ios',
+          'deviceId': 'device-${DateTime.now().millisecondsSinceEpoch}',
+          'deviceName': Platform.isAndroid ? 'Android Device' : 'iOS Device',
+          'appVersion': '1.0.0',
+        },
+      );
+
+      print('✅ FCM token registered with backend');
+    } catch (e) {
+      print('❌ Failed to register FCM token: $e');
+    }
+  }
+
+  // Unregister FCM token
+  Future<void> unregisterToken() async {
+    if (_fcmToken == null) return;
+
+    try {
+      await _apiService.delete(
+        '/notifications/device-token',
+        data: {
+          'token': _fcmToken,
+        },
+      );
+      print('✅ FCM token unregistered');
+    } catch (e) {
+      print('❌ Failed to unregister FCM token: $e');
+    }
+  }
+
+  // Handle foreground messages
+  void _handleForegroundMessage(RemoteMessage message) {
+    print('📬 Foreground message: ${message.messageId}');
+
+    // Create notification model
+    final notification = NotificationModel(
+      id: message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      userId: message.data['userId'] ?? '',
+      type: message.data['type'] ?? 'unknown',
+      title: message.notification?.title ?? 'New Notification',
+      body: message.notification?.body ?? '',
+      data: message.data,
+      read: false,
+      priority: message.data['priority'] ?? 'normal',
+      actionUrl: message.data['actionUrl'],
+      imageUrl: message.notification?.android?.imageUrl,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    // Notify listeners
+    _onNotificationReceived?.call(notification);
+
+    // Show local notification
+    _showLocalNotification(
+      notification.title,
+      notification.body,
+      notification.data,
+      notification.priority,
+    );
+  }
+
+  // Show local notification
+  Future<void> _showLocalNotification(
+    String title,
+    String body,
+    Map<String, dynamic> data,
+    String priority,
+  ) async {
+    final importance = priority == 'urgent' || priority == 'high'
+        ? Importance.high
+        : Importance.defaultImportance;
+
+    final androidDetails = AndroidNotificationDetails(
+      'default',
+      'Default Notifications',
+      channelDescription: 'General notifications',
+      importance: importance,
+      priority: priority == 'urgent' || priority == 'high'
+          ? Priority.high
+          : Priority.defaultPriority,
+      showWhen: true,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _localNotifications.show(
+      DateTime.now().millisecond,
+      title,
+      body,
+      details,
+      payload: jsonEncode(data),
+    );
+  }
+
+  // Handle notification tap (from FCM)
+  void _handleNotificationTap(RemoteMessage message) {
+    print('👆 Notification tapped: ${message.messageId}');
+    final type = message.data['type'];
+    _navigateToScreen(type, message.data);
+  }
+
+  // Handle local notification tap
+  void _onLocalNotificationTap(NotificationResponse response) {
+    print('👆 Local notification tapped');
+    if (response.payload != null) {
+      final data = jsonDecode(response.payload!);
+      final type = data['type'];
+      _navigateToScreen(type, data);
+    }
+  }
+
+  // Navigate to appropriate screen based on notification type
+  void _navigateToScreen(String? type, Map<String, dynamic> data) {
+    if (type == null) return;
+
+    String route = '/';
+    switch (type) {
+      case 'booking_request':
+      case 'booking_accepted':
+      case 'booking_declined':
+      case 'booking_cancelled':
+      case 'booking_reminder':
+        route = '/bookings';
+        break;
+      case 'new_message':
+        route = '/messages';
+        break;
+      case 'call_incoming':
+      case 'call_missed':
+        route = '/call-history';
+        break;
+      case 'payment_received':
+        route = '/earnings';
+        break;
+      case 'profile_approved':
+      case 'profile_rejected':
+        route = '/profile';
+        break;
+      default:
+        route = '/notifications';
+    }
+
+    _onNotificationTapped?.call(route);
+  }
+
+  // Get notifications from API
+  Future<Map<String, dynamic>> getNotifications({
+    int page = 1,
+    int limit = 20,
+    bool unreadOnly = false,
+  }) async {
+    try {
+      final response = await _apiService.get(
+        '/notifications',
+        queryParameters: {
+          'page': page.toString(),
+          'limit': limit.toString(),
+          'unreadOnly': unreadOnly.toString(),
+        },
+      );
+
+      if (!response.success || response.data == null) {
+        throw Exception('Failed to fetch notifications');
+      }
+
+      final data = response.data as Map<String, dynamic>;
+      final notifications = (data['notifications'] as List)
+          .map((n) => NotificationModel.fromJson(n))
+          .toList();
+
+      return {
+        'notifications': notifications,
+        'pagination': data['pagination'],
+        'unreadCount': data['unreadCount'],
+      };
+    } catch (e) {
+      print('❌ Error fetching notifications: $e');
+      rethrow;
+    }
+  }
+
+  // Mark notification as read
+  Future<void> markAsRead(String notificationId) async {
+    try {
+      await _apiService.put('/notifications/$notificationId/read');
+      print('✅ Notification marked as read');
+    } catch (e) {
+      print('❌ Error marking notification as read: $e');
+      rethrow;
+    }
+  }
+
+  // Mark all notifications as read
+  Future<void> markAllAsRead() async {
+    try {
+      await _apiService.put('/notifications/read-all');
+      print('✅ All notifications marked as read');
+    } catch (e) {
+      print('❌ Error marking all as read: $e');
+      rethrow;
+    }
+  }
+
+  // Delete notification
+  Future<void> deleteNotification(String notificationId) async {
+    try {
+      await _apiService.delete('/notifications/$notificationId');
+      print('✅ Notification deleted');
+    } catch (e) {
+      print('❌ Error deleting notification: $e');
+      rethrow;
+    }
+  }
+
+  // Get FCM token
+  String? get fcmToken => _fcmToken;
+
+  // Check if initialized
+  bool get isInitialized => _initialized;
+}
