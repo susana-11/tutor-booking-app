@@ -81,6 +81,12 @@ exports.initiateCall = async (req, res) => {
     const { receiverId, callType, bookingId } = req.body;
     const initiatorId = req.user.userId; // Fixed: use userId instead of id
 
+    console.log(`📞 Initiating call:`);
+    console.log(`   Initiator ID: ${initiatorId}`);
+    console.log(`   Receiver ID: ${receiverId}`);
+    console.log(`   Call Type: ${callType}`);
+    console.log(`   User object:`, req.user);
+
     // Validate call type
     if (!['voice', 'video'].includes(callType)) {
       return res.status(400).json({
@@ -92,6 +98,7 @@ exports.initiateCall = async (req, res) => {
     // Check if receiver exists
     const receiver = await User.findById(receiverId);
     if (!receiver) {
+      console.log(`❌ Receiver not found: ${receiverId}`);
       return res.status(404).json({
         success: false,
         message: 'Receiver not found'
@@ -203,7 +210,16 @@ exports.answerCall = async (req, res) => {
     }
 
     // Verify user is the receiver
-    if (call.receiverId.toString() !== userId) {
+    const receiverIdStr = call.receiverId.toString();
+    const userIdStr = userId.toString();
+    
+    console.log(`📞 Answer call authorization check:`);
+    console.log(`   User ID: ${userIdStr}`);
+    console.log(`   Receiver ID: ${receiverIdStr}`);
+    console.log(`   Match: ${receiverIdStr === userIdStr}`);
+    
+    if (receiverIdStr !== userIdStr) {
+      console.log(`❌ Authorization failed: User ${userIdStr} is not the receiver ${receiverIdStr}`);
       return res.status(403).json({
         success: false,
         message: 'Not authorized to answer this call'
@@ -218,9 +234,10 @@ exports.answerCall = async (req, res) => {
     // Notify initiator via Socket.IO
     const io = req.app.get('io');
     if (io) {
-      io.to(call.initiatorId.toString()).emit('call_answered', {
+      io.to(`user_${call.initiatorId.toString()}`).emit('call_answered', {
         callId: call.callId
       });
+      console.log(`✅ Call answered notification sent to user_${call.initiatorId.toString()}`);
     }
 
     console.log(`✅ Call answered: ${callId}`);
@@ -260,7 +277,16 @@ exports.rejectCall = async (req, res) => {
     }
 
     // Verify user is the receiver
-    if (call.receiverId.toString() !== userId) {
+    const receiverIdStr = call.receiverId.toString();
+    const userIdStr = userId.toString();
+    
+    console.log(`📞 Reject call authorization check:`);
+    console.log(`   User ID: ${userIdStr}`);
+    console.log(`   Receiver ID: ${receiverIdStr}`);
+    console.log(`   Match: ${receiverIdStr === userIdStr}`);
+    
+    if (receiverIdStr !== userIdStr) {
+      console.log(`❌ Authorization failed: User ${userIdStr} is not the receiver ${receiverIdStr}`);
       return res.status(403).json({
         success: false,
         message: 'Not authorized to reject this call'
@@ -279,9 +305,10 @@ exports.rejectCall = async (req, res) => {
     // Notify initiator via Socket.IO
     const io = req.app.get('io');
     if (io) {
-      io.to(call.initiatorId.toString()).emit('call_rejected', {
+      io.to(`user_${call.initiatorId.toString()}`).emit('call_rejected', {
         callId: call.callId
       });
+      console.log(`❌ Call rejected notification sent to user_${call.initiatorId.toString()}`);
     }
 
     console.log(`❌ Call rejected: ${callId}`);
@@ -346,10 +373,11 @@ exports.endCall = async (req, res) => {
         ? receiverIdStr 
         : initiatorIdStr;
       
-      io.to(otherUserId).emit('call_ended', {
+      io.to(`user_${otherUserId}`).emit('call_ended', {
         callId: call.callId,
         duration: call.duration
       });
+      console.log(`📴 Call ended notification sent to user_${otherUserId}`);
     }
 
     console.log(`📴 Call ended: ${callId}, Duration: ${call.duration}s`);
