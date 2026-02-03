@@ -15,13 +15,13 @@ async function createCloudTestUsers() {
     // Create subjects first
     console.log('\n📚 Creating subjects...');
     const subjects = [
-      { name: 'Mathematics', description: 'Math tutoring' },
-      { name: 'Physics', description: 'Physics tutoring' },
-      { name: 'Chemistry', description: 'Chemistry tutoring' },
-      { name: 'Biology', description: 'Biology tutoring' },
-      { name: 'English', description: 'English tutoring' },
-      { name: 'Economics', description: 'Economics tutoring' },
-      { name: 'General', description: 'General tutoring' }
+      { name: 'Mathematics', description: 'Math tutoring', category: 'Mathematics' },
+      { name: 'Physics', description: 'Physics tutoring', category: 'Sciences' },
+      { name: 'Chemistry', description: 'Chemistry tutoring', category: 'Sciences' },
+      { name: 'Biology', description: 'Biology tutoring', category: 'Sciences' },
+      { name: 'English', description: 'English tutoring', category: 'Languages' },
+      { name: 'Economics', description: 'Economics tutoring', category: 'Business & Economics' },
+      { name: 'General', description: 'General tutoring', category: 'Other' }
     ];
 
     for (const subject of subjects) {
@@ -44,6 +44,9 @@ async function createCloudTestUsers() {
       tutorUser = await User.create({
         email: tutorEmail,
         password: hashedPassword,
+        firstName: 'Hindekie',
+        lastName: 'Amanuel',
+        phone: '0923394163',
         role: 'tutor',
         isEmailVerified: true,
         profileCompleted: true
@@ -61,21 +64,54 @@ async function createCloudTestUsers() {
       const economicsSubject = await Subject.findOne({ name: 'Economics' });
       tutorProfile = await TutorProfile.create({
         userId: tutorUser._id,
-        firstName: 'Hindekie',
-        lastName: 'Amanuel',
-        phoneNumber: '0923394163',
         bio: 'Experienced Economics tutor with 5+ years of teaching experience.',
-        subjects: [economicsSubject._id],
-        hourlyRate: 500,
-        education: 'Bachelor in Economics',
-        experience: '5 years',
-        isApproved: true,
-        isVisible: true,
-        acceptingBookings: true,
-        rating: 4.8,
-        totalReviews: 15,
-        totalEarnings: 25000,
-        completedSessions: 50
+        headline: 'Expert Economics Tutor',
+        experience: {
+          years: 5,
+          description: '5 years of teaching Economics at high school and university level'
+        },
+        education: [{
+          degree: 'Bachelor',
+          institution: 'Addis Ababa University',
+          year: 2018,
+          field: 'Economics'
+        }],
+        subjects: [{
+          name: economicsSubject.name,
+          category: economicsSubject.category,
+          gradelevels: ['High School (9-12)', 'College/University'],
+          experience: '5 years',
+          isSpecialty: true
+        }],
+        pricing: {
+          hourlyRate: 500,
+          currency: 'ETB'
+        },
+        teachingMode: {
+          online: true,
+          inPerson: false
+        },
+        availability: {
+          timezone: 'Africa/Addis_Ababa',
+          schedule: []
+        },
+        verification: {
+          status: 'approved',
+          isVerified: true,
+          verifiedAt: new Date()
+        },
+        settings: {
+          isVisible: true,
+          acceptingBookings: true,
+          autoAcceptBookings: false
+        },
+        stats: {
+          rating: 4.8,
+          totalReviews: 15,
+          totalEarnings: 25000,
+          completedSessions: 50,
+          totalStudents: 20
+        }
       });
       console.log('✅ Tutor profile created');
     } else {
@@ -92,6 +128,9 @@ async function createCloudTestUsers() {
       studentUser = await User.create({
         email: studentEmail,
         password: hashedPassword,
+        firstName: 'Etsebruk',
+        lastName: 'Amanuel',
+        phone: '0911223344',
         role: 'student',
         isEmailVerified: true,
         profileCompleted: true
@@ -108,11 +147,11 @@ async function createCloudTestUsers() {
     if (!studentProfile) {
       studentProfile = await StudentProfile.create({
         userId: studentUser._id,
-        firstName: 'Etsebruk',
-        lastName: 'Amanuel',
-        phoneNumber: '0911223344',
+        dateOfBirth: new Date('2005-01-15'),
         grade: '12',
-        school: 'Test High School'
+        school: 'Test High School',
+        learningGoals: ['Improve Economics understanding', 'Prepare for university'],
+        interests: ['Economics', 'Business']
       });
       console.log('✅ Student profile created');
     } else {

@@ -38,8 +38,9 @@ const messageSchema = new mongoose.Schema({
   
   content: {
     type: String,
-    required: true,
-    trim: true
+    required: false, // Not required when attachments are present
+    trim: true,
+    default: ''
   },
   
   type: {

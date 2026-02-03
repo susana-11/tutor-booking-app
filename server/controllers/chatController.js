@@ -225,7 +225,8 @@ exports.sendMessage = async (req, res) => {
     const { conversationId } = req.params;
     const { content, type = 'text', attachments = [], replyToId } = req.body;
 
-    if (!content && attachments.length === 0) {
+    // Validate that either content or attachments are provided
+    if ((!content || content.trim() === '') && (!attachments || attachments.length === 0)) {
       return res.status(400).json({
         success: false,
         message: 'Message content or attachments required'
@@ -521,6 +522,9 @@ exports.uploadAttachment = async (req, res) => {
       });
     }
 
+    // Cloudinary automatically uploads and returns URL
+    const fileUrl = req.file.path; // This is the full Cloudinary URL
+    
     // Determine file type based on mimetype
     let fileType = 'document';
     if (req.file.mimetype.startsWith('audio/')) {
@@ -531,20 +535,15 @@ exports.uploadAttachment = async (req, res) => {
       fileType = 'video';
     }
 
-    // Get file stats for size
-    const fs = require('fs');
-    const stats = fs.statSync(req.file.path);
-
-    // Construct file URL (relative to server)
-    const fileUrl = `/uploads/chat/${req.file.filename}`;
+    console.log(`✅ File uploaded to Cloudinary: ${fileUrl}`);
 
     res.json({
       success: true,
       data: {
         name: req.file.originalname,
-        url: fileUrl,
+        url: fileUrl, // Full Cloudinary URL (permanent)
         type: fileType,
-        size: stats.size,
+        size: req.file.size,
         mimeType: req.file.mimetype
       }
     });
