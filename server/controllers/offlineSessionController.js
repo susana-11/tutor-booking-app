@@ -30,7 +30,7 @@ exports.checkIn = async (req, res) => {
         }
 
         // Check in
-        await booking.checkIn(userId, userRole, location);
+        await booking.performCheckIn(userId, userRole, location);
 
         // Send notification to other party
         const otherPartyId = userRole === 'student' ? booking.tutorId._id : booking.studentId._id;
@@ -125,7 +125,7 @@ exports.checkOut = async (req, res) => {
         }
 
         // Check out
-        await booking.checkOut(userId, userRole);
+        await booking.performCheckOut(userId, userRole);
 
         // Send notification to other party
         const otherPartyId = userRole === 'student' ? booking.tutorId._id : booking.studentId._id;

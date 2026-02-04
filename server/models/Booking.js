@@ -850,8 +850,8 @@ bookingSchema.methods.canStartSession = function () {
   return now >= earlyStartTime && now <= lateStartTime;
 };
 
-// Method to check in (for offline sessions)
-bookingSchema.methods.checkIn = async function (userId, userRole, location) {
+// Method to perform check-in (for offline sessions)
+bookingSchema.methods.performCheckIn = async function (userId, userRole, location) {
   if (this.sessionType !== 'inPerson') {
     throw new Error('Check-in is only available for in-person sessions');
   }
@@ -923,8 +923,8 @@ bookingSchema.methods.checkIn = async function (userId, userRole, location) {
   return await this.save();
 };
 
-// Method to check out (for offline sessions)
-bookingSchema.methods.checkOut = async function (userId, userRole) {
+// Method to perform check-out (for offline sessions)
+bookingSchema.methods.performCheckOut = async function (userId, userRole) {
   if (this.sessionType !== 'inPerson') {
     throw new Error('Check-out is only available for in-person sessions');
   }
