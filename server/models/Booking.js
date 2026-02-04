@@ -655,12 +655,12 @@ bookingSchema.methods.canStartSession = function () {
   const [hours, minutes] = this.startTime.split(':');
   sessionDateTime.setHours(parseInt(hours), parseInt(minutes));
   
-  // Allow starting 5 minutes before scheduled time
-  sessionDateTime.setMinutes(sessionDateTime.getMinutes() - 5);
+  // Allow starting 24 hours before scheduled time (for testing)
+  sessionDateTime.setHours(sessionDateTime.getHours() - 24);
   
-  // Allow starting up to 15 minutes after scheduled time
+  // Allow starting up to 24 hours after scheduled time (for testing)
   const lateStartTime = new Date(sessionDateTime);
-  lateStartTime.setMinutes(lateStartTime.getMinutes() + 20); // 5 min early + 15 min late
+  lateStartTime.setHours(lateStartTime.getHours() + 48); // 24 hours before + 24 hours after
 
   return now >= sessionDateTime && now <= lateStartTime;
 };
