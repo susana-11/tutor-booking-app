@@ -1374,11 +1374,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final currentUserRole = authProvider.user?.role;
     
     if (currentUserRole == 'student') {
-      // Student viewing tutor profile
-      Navigator.pushNamed(
-        context,
-        '/student/tutor/${widget.participantId}',
-      );
+      // Student viewing tutor profile - use go_router
+      context.push('/student/tutor/${widget.participantId}');
     } else if (currentUserRole == 'tutor') {
       // Tutor viewing student profile (show basic info dialog)
       _showStudentInfoDialog();

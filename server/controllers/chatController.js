@@ -690,11 +690,13 @@ exports.clearChat = async (req, res) => {
       });
     }
 
+    // Check if user is a participant - ensure both IDs are strings for comparison
     const isParticipant = conversation.participants.some(
-      p => p.userId.toString() === userId
+      p => p.userId.toString() === userId.toString()
     );
 
     if (!isParticipant) {
+      console.log(`❌ User ${userId} not authorized - not a participant`);
       return res.status(403).json({
         success: false,
         message: 'You are not authorized to clear this conversation'
