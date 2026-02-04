@@ -647,22 +647,43 @@ bookingSchema.methods.releaseEscrow = async function () {
 
 // Method to check if session can start
 bookingSchema.methods.canStartSession = function () {
-  if (this.status !== 'confirmed') return false;
-  if (this.session.isActive) return false;
+  if (this.status !== 'confirmed') {
+    console.log('❌ Cannot start: status is not confirmed:', this.status);
+    return false;
+  }
+  if (this.session.isActive) {
+    console.log('❌ Cannot start: session is already active');
+    return false;
+  }
 
   const now = new Date();
   const sessionDateTime = new Date(this.sessionDate);
   const [hours, minutes] = this.startTime.split(':');
-  sessionDateTime.setHours(parseInt(hours), parseInt(minutes));
+  sessionDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+  
+  console.log('⏰ Session timing check:', {
+    now: now.toISOString(),
+    sessionDate: this.sessionDate,
+    startTime: this.startTime,
+    calculatedSessionDateTime: sessionDateTime.toISOString(),
+    bookingId: this._id
+  });
   
   // Allow starting 24 hours before scheduled time (for testing)
-  sessionDateTime.setHours(sessionDateTime.getHours() - 24);
+  const earlyStartTime = new Date(sessionDateTime);
+  earlyStartTime.setHours(earlyStartTime.getHours() - 24);
   
   // Allow starting up to 24 hours after scheduled time (for testing)
   const lateStartTime = new Date(sessionDateTime);
-  lateStartTime.setHours(lateStartTime.getHours() + 48); // 24 hours before + 24 hours after
+  lateStartTime.setHours(lateStartTime.getHours() + 24);
 
-  return now >= sessionDateTime && now <= lateStartTime;
+  console.log('⏰ Time window:', {
+    earlyStartTime: earlyStartTime.toISOString(),
+    lateStartTime: lateStartTime.toISOString(),
+    canStart: now >= earlyStartTime && now <= lateStartTime
+  });
+
+  return now >= earlyStartTime && now <= lateStartTime;
 };
 
 // Method to add rating
