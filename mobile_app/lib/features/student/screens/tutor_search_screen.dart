@@ -23,7 +23,7 @@ class _TutorSearchScreenState extends State<TutorSearchScreen> {
   // Filters
   String _selectedSubject = 'All Subjects';
   String _selectedGrade = 'All Grades';
-  RangeValues _priceRange = const RangeValues(10, 100);
+  RangeValues _priceRange = const RangeValues(0, 1000); // Changed from 10-100 to 0-1000
   String _selectedMode = 'All Modes';
   double _minRating = 0;
 
@@ -185,7 +185,7 @@ class _TutorSearchScreenState extends State<TutorSearchScreen> {
     if (_selectedSubject != 'All Subjects') activeFilters++;
     if (_selectedMode != 'All Modes') activeFilters++;
     if (_minRating > 0) activeFilters++;
-    if (_priceRange.start != 10 || _priceRange.end != 100) activeFilters++;
+    if (_priceRange.start != 0 || _priceRange.end != 1000) activeFilters++;
     
     return activeFilters > 0 ? 'Filters ($activeFilters)' : 'Filters';
   }
@@ -250,7 +250,7 @@ class _TutorSearchScreenState extends State<TutorSearchScreen> {
                   _selectedSubject = 'All Subjects';
                   _selectedMode = 'All Modes';
                   _minRating = 0;
-                  _priceRange = const RangeValues(10, 100);
+                  _priceRange = const RangeValues(0, 1000);
                 });
                 _loadTutors();
               },
@@ -491,7 +491,7 @@ class _TutorSearchScreenState extends State<TutorSearchScreen> {
                           _selectedGrade = 'All Grades';
                           _selectedMode = 'All Modes';
                           _minRating = 0;
-                          _priceRange = const RangeValues(10, 100);
+                          _priceRange = const RangeValues(0, 1000);
                         });
                       },
                       child: const Text('Reset'),
@@ -527,9 +527,9 @@ class _TutorSearchScreenState extends State<TutorSearchScreen> {
                 ),
                 RangeSlider(
                   values: _priceRange,
-                  min: 10,
-                  max: 200,
-                  divisions: 19,
+                  min: 0,
+                  max: 1000,
+                  divisions: 20,
                   labels: RangeLabels(
                     '\$${_priceRange.start.round()}',
                     '\$${_priceRange.end.round()}',

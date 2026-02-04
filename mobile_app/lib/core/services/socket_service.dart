@@ -20,16 +20,24 @@ class SocketService {
   String? get userId => _userId;
 
   Future<void> connect() async {
-    if (_isConnected) return;
+    if (_isConnected) {
+      print('ℹ️ Socket already connected');
+      return;
+    }
 
     try {
       final token = await StorageService.getAuthToken();
       if (token == null) {
         print('❌ No auth token found, cannot connect to socket');
+        print('❌ User must be logged in to connect to socket');
         return;
       }
 
+      print('✅ Auth token found: ${token.substring(0, 20)}...');
+
       final serverUrl = AppConfig.instance.baseUrl.replaceAll('/api', '');
+      print('🔌 Socket server URL: $serverUrl');
+      print('🔌 Attempting to connect to socket server...');
       
       _socket = IO.io(serverUrl, IO.OptionBuilder()
           .setTransports(['websocket'])
@@ -46,9 +54,10 @@ class SocketService {
 
       _setupEventHandlers();
       
-      print('🔌 Attempting to connect to socket server: $serverUrl');
-    } catch (e) {
+      print('🔌 Socket instance created, waiting for connection...');
+    } catch (e, stackTrace) {
       print('❌ Socket connection error: $e');
+      print('❌ Stack trace: $stackTrace');
     }
   }
 
@@ -57,7 +66,8 @@ class SocketService {
 
     _socket!.onConnect((_) {
       _isConnected = true;
-      print('🔌 Socket connected successfully');
+      print('✅✅✅ Socket connected successfully! ✅✅✅');
+      print('🔌 Socket ID: ${_socket!.id}');
       _notifyCallbacks('connect', null);
     });
 
@@ -68,13 +78,35 @@ class SocketService {
     });
 
     _socket!.onConnectError((error) {
-      print('❌ Socket connection error: $error');
+      print('❌❌❌ Socket connection error: $error');
+      print('❌ Error type: ${error.runtimeType}');
+      print('❌ Error details: ${error.toString()}');
       _notifyCallbacks('connect_error', error);
     });
 
     _socket!.onError((error) {
       print('❌ Socket error: $error');
       _notifyCallbacks('error', error);
+    });
+
+    _socket!.on('connect_timeout', (data) {
+      print('⏱️ Socket connection timeout: $data');
+    });
+
+    _socket!.on('reconnect', (data) {
+      print('🔄 Socket reconnected: $data');
+    });
+
+    _socket!.on('reconnect_attempt', (data) {
+      print('🔄 Socket reconnection attempt: $data');
+    });
+
+    _socket!.on('reconnect_error', (data) {
+      print('❌ Socket reconnection error: $data');
+    });
+
+    _socket!.on('reconnect_failed', (data) {
+      print('❌ Socket reconnection failed: $data');
     });
 
     // Chat events
@@ -89,6 +121,27 @@ class SocketService {
 
     _socket!.on('user_stopped_typing', (data) {
       _notifyCallbacks('user_stopped_typing', data);
+    });
+
+    // Call events
+    _socket!.on('incoming_call', (data) {
+      print('📞📞📞 Incoming call received via socket: $data');
+      _notifyCallbacks('incoming_call', data);
+    });
+
+    _socket!.on('call_answered', (data) {
+      print('✅ Call answered via socket: $data');
+      _notifyCallbacks('call_answered', data);
+    });
+
+    _socket!.on('call_rejected', (data) {
+      print('❌ Call rejected via socket: $data');
+      _notifyCallbacks('call_rejected', data);
+    });
+
+    _socket!.on('call_ended', (data) {
+      print('📴 Call ended via socket: $data');
+      _notifyCallbacks('call_ended', data);
     });
 
     // Booking events
@@ -121,6 +174,8 @@ class SocketService {
     _socket!.on('unread_count', (data) {
       _notifyCallbacks('unread_count', data);
     });
+
+    print('✅ Socket event handlers registered');
   }
 
   void disconnect() {

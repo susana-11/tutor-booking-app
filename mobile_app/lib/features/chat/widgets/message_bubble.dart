@@ -12,6 +12,7 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onReply;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onForward;
 
   const MessageBubble({
     super.key,
@@ -21,6 +22,7 @@ class MessageBubble extends StatelessWidget {
     this.onReply,
     this.onEdit,
     this.onDelete,
+    this.onForward,
   });
 
   @override
@@ -725,9 +727,9 @@ class MessageBubble extends StatelessWidget {
     
     options['copy'] = 'Copy';
     if (onReply != null) options['reply'] = 'Reply';
+    if (onForward != null) options['forward'] = 'Forward';
     if (onEdit != null) options['edit'] = 'Edit';
     if (onDelete != null) options['delete'] = 'Delete';
-    options['forward'] = 'Forward';
     options['info'] = 'Info';
     
     showModalBottomSheet(
@@ -783,14 +785,14 @@ class MessageBubble extends StatelessWidget {
       case 'reply':
         onReply?.call();
         break;
+      case 'forward':
+        onForward?.call();
+        break;
       case 'edit':
         onEdit?.call();
         break;
       case 'delete':
         onDelete?.call();
-        break;
-      case 'forward':
-        // TODO: Implement forward
         break;
       case 'info':
         // TODO: Show message info

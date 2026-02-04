@@ -52,6 +52,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+    // Show loading message for slow server
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Creating your account... This may take up to 2 minutes if the server is sleeping.'),
+        duration: Duration(seconds: 5),
+        backgroundColor: AppTheme.primaryColor,
+      ),
+    );
+
     final authProvider = context.read<AuthProvider>();
     
     final success = await authProvider.register(
@@ -68,10 +77,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
         // Navigate to email verification
         context.go('/verify-email?email=${_emailController.text.trim()}');
       } else {
+        // Better error messages
+        String errorMessage = authProvider.error ?? 'Registration failed';
+        
+        if (errorMessage.contains('timeout') || errorMessage.contains('Timeout')) {
+          errorMessage = 'Server is waking up. Please wait 30 seconds and try again.';
+        } else if (errorMessage.contains('network') || errorMessage.contains('connection')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(authProvider.error ?? 'Registration failed'),
+            content: Text(errorMessage),
             backgroundColor: AppTheme.errorColor,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: _register,
+            ),
           ),
         );
       }

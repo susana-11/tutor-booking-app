@@ -43,17 +43,61 @@ class TutorService {
         queryParams['rating'] = minRating;
       }
 
+      print('🔍 TUTOR SERVICE: Searching tutors with params: $queryParams');
+      
       final response = await _apiService.get('/tutors', queryParameters: queryParams);
 
+      print('📡 TUTOR SERVICE: Response success: ${response.success}');
+      print('📡 TUTOR SERVICE: Response data type: ${response.data.runtimeType}');
+      print('📡 TUTOR SERVICE: Response data keys: ${response.data is Map ? (response.data as Map).keys.toList() : "not a map"}');
+
       if (response.success && response.data != null) {
-        final data = response.data['data'] ?? response.data;
-        final tutorsList = data['tutors'] as List;
-        final tutors = tutorsList.cast<Map<String, dynamic>>();
+        List<Map<String, dynamic>> tutors = [];
+        
+        // The API returns: { success: true, data: { tutors: [...], pagination: {...} } }
+        if (response.data is Map) {
+          final responseMap = response.data as Map<String, dynamic>;
+          
+          // Check if there's a 'data' wrapper
+          if (responseMap.containsKey('data')) {
+            final dataObj = responseMap['data'];
+            print('📋 TUTOR SERVICE: Found data key, type: ${dataObj.runtimeType}');
+            
+            if (dataObj is Map && dataObj.containsKey('tutors')) {
+              // data.tutors format
+              final tutorsList = dataObj['tutors'] as List;
+              tutors = tutorsList.cast<Map<String, dynamic>>();
+              print('✅ TUTOR SERVICE: Found tutors in data.tutors, count: ${tutors.length}');
+            } else if (dataObj is List) {
+              // data is directly a list
+              tutors = dataObj.cast<Map<String, dynamic>>();
+              print('✅ TUTOR SERVICE: data is a list, count: ${tutors.length}');
+            }
+          } else if (responseMap.containsKey('tutors')) {
+            // Direct tutors key
+            final tutorsList = responseMap['tutors'] as List;
+            tutors = tutorsList.cast<Map<String, dynamic>>();
+            print('✅ TUTOR SERVICE: Found tutors directly, count: ${tutors.length}');
+          }
+        } else if (response.data is List) {
+          // Direct array response
+          tutors = (response.data as List).cast<Map<String, dynamic>>();
+          print('✅ TUTOR SERVICE: Response is direct array, count: ${tutors.length}');
+        }
+        
+        print('✅ TUTOR SERVICE: Final tutor count: ${tutors.length}');
+        if (tutors.isNotEmpty) {
+          print('📋 TUTOR SERVICE: First tutor keys: ${tutors[0].keys.toList()}');
+          print('📋 TUTOR SERVICE: First tutor name: ${tutors[0]['name']}');
+        }
         return ApiResponse.success(tutors);
       }
 
+      print('❌ TUTOR SERVICE: Response failed: ${response.error}');
       return ApiResponse.error(response.error ?? 'Failed to fetch tutors');
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ TUTOR SERVICE: Exception: $e');
+      print('❌ TUTOR SERVICE: Stack trace: $stackTrace');
       return ApiResponse.error('Failed to fetch tutors: $e');
     }
   }
@@ -83,9 +127,26 @@ class TutorService {
       });
 
       if (response.success && response.data != null) {
-        final data = response.data['data'] ?? response.data;
-        final tutorsList = data['tutors'] as List;
-        final tutors = tutorsList.cast<Map<String, dynamic>>();
+        // The API returns tutors directly as an array, not wrapped in an object
+        List<Map<String, dynamic>> tutors;
+        
+        if (response.data is List) {
+          // Direct array response
+          tutors = (response.data as List).cast<Map<String, dynamic>>();
+        } else if (response.data is Map) {
+          // Check for nested data structure
+          final data = response.data['data'] ?? response.data;
+          if (data is List) {
+            tutors = data.cast<Map<String, dynamic>>();
+          } else if (data['tutors'] != null) {
+            tutors = (data['tutors'] as List).cast<Map<String, dynamic>>();
+          } else {
+            tutors = [];
+          }
+        } else {
+          tutors = [];
+        }
+        
         return ApiResponse.success(tutors);
       }
 

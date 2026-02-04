@@ -84,9 +84,9 @@ class AppConfig {
   bool get enableCrashReporting => !kDebugMode;
   
   // API Timeouts (in seconds) - Increased for Render free tier wake-up time
-  int get connectTimeout => 90;
-  int get receiveTimeout => 90;
-  int get sendTimeout => 90;
+  int get connectTimeout => 120; // 2 minutes for server wake-up
+  int get receiveTimeout => 120;
+  int get sendTimeout => 120;
   
   // Retry configuration
   int get maxRetryAttempts => 3;

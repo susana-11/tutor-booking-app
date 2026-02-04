@@ -160,6 +160,18 @@ class AuthProvider extends ChangeNotifier {
           requiresProfileCompletion: result.requiresProfileCompletion,
           error: null,
         ));
+        
+        // Reconnect socket after successful login
+        try {
+          print('🔌 Reconnecting socket after login...');
+          final socketService = SocketService();
+          await socketService.connect();
+          print('🔌 Socket reconnected successfully after login');
+        } catch (e) {
+          print('❌ Socket reconnection error after login: $e');
+          // Don't fail login if socket connection fails
+        }
+        
         return true;
       } else {
         _updateState(AuthState(

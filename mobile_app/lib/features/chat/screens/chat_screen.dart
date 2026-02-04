@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as path;
+import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart' as perm;
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/chat_service.dart';
@@ -55,6 +59,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   String _typingUser = '';
   bool _isRecording = false;
   bool _isSending = false;
+  Message? _replyingTo; // Message being replied to
   
   Timer? _typingTimer;
   StreamSubscription? _newMessageSubscription;
@@ -236,10 +241,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         conversationId: widget.conversationId,
         content: messageContent,
         type: type,
+        replyToId: _replyingTo?.id, // Include reply reference
         attachments: attachments,
       );
 
       if (response.success) {
+        // Clear reply state
+        setState(() => _replyingTo = null);
         _scrollToBottom();
       } else {
         // Log but don't show error - message might still be sent via API
@@ -505,6 +513,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 isMe: isMe,
                 showAvatar: !isMe,
                 onReply: () => _replyToMessage(message),
+                onForward: () => _forwardMessage(message),
                 onEdit: isMe ? () => _editMessage(message) : null,
                 onDelete: isMe ? () => _deleteMessage(message) : null,
               ),
@@ -565,64 +574,134 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ],
       ),
       child: SafeArea(
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Attachment button
-            IconButton(
-              onPressed: _showAttachmentOptions,
-              icon: const Icon(Icons.add),
-              color: AppTheme.primaryColor,
-            ),
+            // Reply preview
+            if (_replyingTo != null) _buildReplyPreview(),
             
-            // Message input field
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(24),
+            Row(
+              children: [
+                // Attachment button
+                IconButton(
+                  onPressed: _showAttachmentOptions,
+                  icon: const Icon(Icons.add),
+                  color: AppTheme.primaryColor,
                 ),
-                child: TextField(
-                  controller: _messageController,
-                  focusNode: _messageFocusNode,
-                  maxLines: null,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    hintText: 'Type a message...',
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                
+                // Message input field
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: TextField(
+                      controller: _messageController,
+                      focusNode: _messageFocusNode,
+                      maxLines: null,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        hintText: 'Type a message...',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
-                  onSubmitted: (_) => _sendMessage(),
                 ),
-              ),
-            ),
-            
-            const SizedBox(width: 8),
-            
-            // Send button
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _messageController,
-              builder: (context, value, child) {
-                final hasText = value.text.trim().isNotEmpty;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  child: FloatingActionButton.small(
-                    onPressed: hasText ? () => _sendMessage() : _recordVoiceMessage,
-                    backgroundColor: AppTheme.primaryColor,
-                    elevation: 0,
-                    child: Icon(
-                      hasText ? Icons.send : Icons.mic,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                );
-              },
+                
+                const SizedBox(width: 8),
+                
+                // Send button
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _messageController,
+                  builder: (context, value, child) {
+                    final hasText = value.text.trim().isNotEmpty;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      child: FloatingActionButton.small(
+                        onPressed: hasText ? () => _sendMessage() : _recordVoiceMessage,
+                        backgroundColor: AppTheme.primaryColor,
+                        elevation: 0,
+                        child: Icon(
+                          hasText ? Icons.send : Icons.mic,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildReplyPreview() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+        border: Border(
+          left: BorderSide(
+            color: AppTheme.primaryColor,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.reply,
+                      size: 16,
+                      color: AppTheme.primaryColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Replying to ${_replyingTo!.senderName}',
+                      style: TextStyle(
+                        color: AppTheme.primaryColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _replyingTo!.content,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => setState(() => _replyingTo = null),
+            icon: const Icon(Icons.close, size: 20),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
       ),
     );
   }
@@ -895,39 +974,369 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     setState(() => _isRecording = false);
   }
 
-  void _takePhoto() {
-    // TODO: Implement camera
-    _showError('Camera feature coming soon!');
+  void _takePhoto() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      
+      if (photo != null) {
+        await _sendImageMessage(photo);
+      }
+    } catch (e) {
+      print('❌ Take photo error: $e');
+      _showError('Failed to take photo: $e');
+    }
   }
 
-  void _pickImage() {
-    // TODO: Implement image picker
-    _showError('Image picker feature coming soon!');
+  void _pickImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        await _sendImageMessage(image);
+      }
+    } catch (e) {
+      print('❌ Pick image error: $e');
+      _showError('Failed to pick image: $e');
+    }
+  }
+
+  Future<void> _sendImageMessage(XFile imageFile) async {
+    try {
+      setState(() => _isSending = true);
+      
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              SizedBox(width: 16),
+              Text('Uploading image...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+        ),
+      );
+
+      // Upload the image
+      final file = File(imageFile.path);
+      final fileName = path.basename(imageFile.path);
+      
+      final response = await _chatService.uploadAttachment(
+        file: file,
+        fileName: fileName,
+        fileType: 'image',
+      );
+
+      // Hide loading indicator
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      if (response.success && response.data != null) {
+        final attachment = response.data!;
+        
+        // Send message with image attachment
+        final messageResponse = await _chatService.sendMessage(
+          conversationId: widget.conversationId,
+          content: '', // Empty content for image-only message
+          type: MessageType.image,
+          attachments: [attachment],
+        );
+
+        if (messageResponse.success) {
+          print('✅ Image message sent successfully');
+          _scrollToBottom();
+        } else {
+          _showError('Failed to send image: ${messageResponse.error}');
+        }
+      } else {
+        _showError('Failed to upload image: ${response.error}');
+      }
+    } catch (e) {
+      print('❌ Send image error: $e');
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _showError('Failed to send image: $e');
+    } finally {
+      setState(() => _isSending = false);
+    }
   }
 
   void _pickDocument() {
-    // TODO: Implement document picker
-    _showError('Document picker feature coming soon!');
+    // Document picker temporarily disabled due to compatibility issues
+    // Will be re-enabled in future update
+    _showError('Document picker will be available in the next update. You can share images, location, contacts, and schedule sessions for now.');
   }
 
-  void _shareLocation() {
-    // TODO: Implement location sharing
-    _showError('Location sharing feature coming soon!');
+  void _shareLocation() async {
+    try {
+      // Check location permission
+      final permission = await perm.Permission.location.request();
+      if (!permission.isGranted) {
+        _showError('Location permission is required');
+        return;
+      }
+      
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+      
+      // Get current location
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      
+      // Hide loading
+      if (mounted) Navigator.pop(context);
+      
+      // Create location message
+      final locationText = 'Location: https://www.google.com/maps?q=${position.latitude},${position.longitude}';
+      
+      // Send location message
+      await _sendMessage(
+        content: locationText,
+        type: MessageType.text,
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Location shared successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      // Hide loading if still showing
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      print('❌ Share location error: $e');
+      _showError('Failed to get location: $e');
+    }
   }
 
-  void _shareContact() {
-    // TODO: Implement contact sharing
-    _showError('Contact sharing feature coming soon!');
+  void _shareContact() async {
+    try {
+      print('🔍 Starting contact share...');
+      
+      // Request contacts permission (this will show system dialog if not granted)
+      print('📱 Requesting contacts permission...');
+      final hasPermission = await FlutterContacts.requestPermission();
+      print('✅ Permission result: $hasPermission');
+      
+      if (!hasPermission) {
+        print('❌ Permission denied');
+        _showError('Contacts permission is required to share contacts');
+        
+        // Show dialog to open settings
+        final openSettings = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Permission Required'),
+            content: const Text('Please grant contacts permission in app settings to share contacts.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Open Settings'),
+              ),
+            ],
+          ),
+        );
+        
+        if (openSettings == true) {
+          await perm.openAppSettings();
+        }
+        return;
+      }
+      
+      // Show loading while fetching contacts
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+      
+      print('📋 Fetching contacts...');
+      // Get all contacts with a small delay to ensure permission is processed
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      final contacts = await FlutterContacts.getContacts(
+        withProperties: true,
+        withPhoto: false,
+      );
+      
+      print('📋 Found ${contacts.length} contacts');
+      
+      // Hide loading
+      if (mounted) Navigator.pop(context);
+      
+      if (contacts.isEmpty) {
+        _showError('No contacts found on your device');
+        return;
+      }
+      
+      // Show contact picker dialog
+      if (!mounted) return;
+      final selectedContact = await showDialog<Contact>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Select Contact'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: ListView.builder(
+              itemCount: contacts.length,
+              itemBuilder: (context, index) {
+                final contact = contacts[index];
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                    child: Text(
+                      contact.displayName.isNotEmpty
+                          ? contact.displayName[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                        color: AppTheme.primaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  title: Text(contact.displayName),
+                  subtitle: contact.phones.isNotEmpty
+                      ? Text(contact.phones.first.number)
+                      : const Text('No phone number'),
+                  onTap: () => Navigator.pop(context, contact),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+      
+      if (selectedContact != null) {
+        print('✅ Contact selected: ${selectedContact.displayName}');
+        // Create contact message
+        final phoneNumber = selectedContact.phones.isNotEmpty
+            ? selectedContact.phones.first.number
+            : 'No phone number';
+        final contactText = '📇 Contact: ${selectedContact.displayName}\n📞 $phoneNumber';
+        
+        // Send contact message
+        await _sendMessage(
+          content: contactText,
+          type: MessageType.text,
+        );
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Contact shared successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Hide loading if still showing
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      print('❌ Share contact error: $e');
+      print('❌ Error stack trace: ${StackTrace.current}');
+      _showError('Failed to share contact: $e');
+    }
   }
 
-  void _scheduleSession() {
-    // TODO: Navigate to booking screen
-    _showError('Session scheduling feature coming soon!');
+  void _scheduleSession() async {
+    try {
+      // Navigate to booking screen with participant info
+      Navigator.pop(context); // Close attachment sheet
+      
+      // Show confirmation dialog
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Schedule Session'),
+          content: Text('Would you like to schedule a tutoring session with ${widget.participantName}?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      
+      if (confirmed == true) {
+        // Check user role
+        final authProvider = context.read<AuthProvider>();
+        final userRole = authProvider.user?.role;
+        
+        if (userRole == 'student') {
+          // Navigate to tutor booking screen
+          // Note: You'll need to import the booking screen
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Opening booking for ${widget.participantName}...'),
+              backgroundColor: Colors.blue,
+            ),
+          );
+          
+          // Send booking link message
+          await _sendMessage(
+            content: '📅 Session booking request sent. Please check your bookings to schedule.',
+            type: MessageType.booking,
+          );
+        } else {
+          _showError('Only students can schedule sessions');
+        }
+      }
+    } catch (e) {
+      print('❌ Schedule session error: $e');
+      _showError('Failed to schedule session: $e');
+    }
   }
 
   void _replyToMessage(Message message) {
-    // TODO: Implement reply functionality
-    _showError('Reply feature coming soon!');
+    setState(() {
+      _replyingTo = message;
+    });
+    _messageFocusNode.requestFocus();
   }
 
   void _editMessage(Message message) {
@@ -938,6 +1347,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void _deleteMessage(Message message) {
     // TODO: Implement delete functionality
     _showError('Delete message feature coming soon!');
+  }
+
+  void _forwardMessage(Message message) {
+    // Show conversation list to select where to forward
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _buildForwardSheet(message),
+    );
   }
 
   void _handleMenuAction(String action) {
@@ -961,6 +1382,193 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         // TODO: Implement report
         _showError('Report feature coming soon!');
         break;
+    }
+  }
+
+  Widget _buildForwardSheet(Message message) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            
+            // Title
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Forward message to...',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const Divider(height: 1),
+            
+            // Conversations list
+            Expanded(
+              child: FutureBuilder<List<Conversation>>(
+                future: _loadConversationsForForward(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(
+                      child: Text('No conversations available'),
+                    );
+                  }
+                  
+                  final conversations = snapshot.data!;
+                  return ListView.builder(
+                    controller: scrollController,
+                    itemCount: conversations.length,
+                    itemBuilder: (context, index) {
+                      final conversation = conversations[index];
+                      // Don't show current conversation
+                      if (conversation.id == widget.conversationId) {
+                        return const SizedBox.shrink();
+                      }
+                      
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                          backgroundImage: conversation.participantAvatar != null
+                              ? NetworkImage(conversation.participantAvatar!)
+                              : null,
+                          child: conversation.participantAvatar == null
+                              ? Text(
+                                  conversation.participantName.isNotEmpty
+                                      ? conversation.participantName[0].toUpperCase()
+                                      : '?',
+                                  style: TextStyle(
+                                    color: AppTheme.primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        title: Text(conversation.participantName),
+                        subtitle: Text(conversation.subject ?? ''),
+                        onTap: () => _confirmForward(conversation, message),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<List<Conversation>> _loadConversationsForForward() async {
+    try {
+      final response = await _chatService.getConversations(refresh: true);
+      if (response.success && response.data != null) {
+        return response.data!;
+      }
+    } catch (e) {
+      print('❌ Error loading conversations: $e');
+    }
+    return [];
+  }
+
+  Future<void> _confirmForward(Conversation conversation, Message message) async {
+    Navigator.pop(context); // Close forward sheet
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Forward Message'),
+        content: Text('Forward this message to ${conversation.participantName}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Forward'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await _performForward(conversation, message);
+    }
+  }
+
+  Future<void> _performForward(Conversation conversation, Message message) async {
+    try {
+      // Show loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              SizedBox(width: 16),
+              Text('Forwarding message...'),
+            ],
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      
+      // Forward the message
+      final response = await _chatService.sendMessage(
+        conversationId: conversation.id,
+        content: message.content,
+        type: message.type,
+        attachments: message.attachments,
+      );
+      
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      
+      if (response.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Message forwarded to ${conversation.participantName}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showError('Failed to forward message');
+      }
+    } catch (e) {
+      print('❌ Error forwarding message: $e');
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _showError('Failed to forward message');
     }
   }
 

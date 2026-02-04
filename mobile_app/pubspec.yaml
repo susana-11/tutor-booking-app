@@ -59,6 +59,9 @@ dependencies:
   # File Handling
   path_provider: ^2.1.1
   
+  # Contacts
+  flutter_contacts: ^1.1.7+1
+  
   # Animations
   lottie: ^2.7.0
   

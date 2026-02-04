@@ -45,13 +45,13 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
   }
 
   String _getFullAudioUrl() {
-    // If URL is already absolute, return as is
+    // If URL is already absolute (Cloudinary URL), return as is
     if (widget.audioUrl.startsWith('http://') || widget.audioUrl.startsWith('https://')) {
       return widget.audioUrl;
     }
     
-    // Otherwise, prepend the server base URL
-    const baseUrl = 'http://10.0.2.2:5000';
+    // For legacy local paths, prepend the Render server URL
+    const baseUrl = 'https://tutor-app-backend-wtru.onrender.com';
     return '$baseUrl${widget.audioUrl}';
   }
 

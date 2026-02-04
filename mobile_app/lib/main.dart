@@ -64,14 +64,31 @@ class _TutorBookingAppState extends State<TutorBookingApp> {
   }
 
   void _initializeServices() async {
+    print('🚀 Initializing app services...');
+    
     // Connect to socket when app starts
+    print('🔌 Connecting to Socket.IO...');
     await _socketService.connect();
     
+    // Wait a bit to see if connection succeeds
+    await Future.delayed(const Duration(seconds: 2));
+    
+    if (_socketService.isConnected) {
+      print('✅ Socket.IO connected successfully!');
+    } else {
+      print('❌ Socket.IO connection failed or still connecting...');
+      print('⚠️ Real-time features may not work!');
+    }
+    
     // Initialize chat service
+    print('💬 Initializing chat service...');
     _chatService.initialize();
     
     // Initialize call service
+    print('📞 Initializing call service...');
     _callService.initialize();
+    
+    print('✅ All services initialized');
     
     // Initialize notification service (uncomment when Firebase is configured)
     // await _notificationService.initialize(

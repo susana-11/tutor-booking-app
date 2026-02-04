@@ -53,11 +53,32 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         }
       } else {
-        // Show error message
+        // Show error message with user-friendly text
+        String errorMessage = authProvider.error ?? 'Login failed';
+        
+        // Convert technical errors to user-friendly messages
+        if (errorMessage.contains('Invalid credentials') || 
+            errorMessage.contains('401')) {
+          errorMessage = 'Authentication failed. Please check your email and password.';
+        } else if (errorMessage.contains('verify your email')) {
+          errorMessage = 'Please verify your email before logging in.';
+        } else if (errorMessage.contains('network') || 
+                   errorMessage.contains('connection')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(authProvider.error ?? 'Login failed'),
+            content: Text(errorMessage),
             backgroundColor: AppTheme.errorColor,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Dismiss',
+              textColor: Colors.white,
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
           ),
         );
       }
