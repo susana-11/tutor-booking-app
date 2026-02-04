@@ -549,12 +549,12 @@ bookingSchema.methods.startSession = async function (userId, agoraChannelName, a
     throw new Error('Session is already active');
   }
 
-  // Check if session time has arrived (allow starting 5 minutes early)
+  // Check if session time has arrived (allow starting 24 hours early for testing)
   const now = new Date();
   const sessionDateTime = new Date(this.sessionDate);
   const [hours, minutes] = this.startTime.split(':');
   sessionDateTime.setHours(parseInt(hours), parseInt(minutes));
-  sessionDateTime.setMinutes(sessionDateTime.getMinutes() - 5); // Allow 5 min early
+  sessionDateTime.setHours(sessionDateTime.getHours() - 24); // Allow 24 hours early for testing
 
   if (now < sessionDateTime) {
     throw new Error('Session cannot be started yet. Please wait until the scheduled time.');
