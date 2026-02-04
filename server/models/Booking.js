@@ -54,10 +54,24 @@ const bookingSchema = new mongoose.Schema({
     required: true,
   },
   location: {
-    type: String,
-    required: function () {
-      return this.sessionType === 'inPerson';
+    type: {
+      type: String,
+      enum: ['student_location', 'tutor_location', 'public_place', 'custom'],
+      default: 'public_place'
     },
+    address: String,
+    city: String,
+    state: String,
+    zipCode: String,
+    country: String,
+    coordinates: {
+      latitude: Number,
+      longitude: Number
+    },
+    placeId: String, // Google Places ID
+    placeName: String, // e.g., "Starbucks Downtown"
+    instructions: String, // e.g., "Meet at the entrance"
+    fullAddress: String // Complete formatted address
   },
   status: {
     type: String,
@@ -232,6 +246,148 @@ const bookingSchema = new mongoose.Schema({
         default: false
       }
     }
+  },
+  
+  // Offline/In-Person Session Management
+  checkIn: {
+    student: {
+      checkedIn: {
+        type: Boolean,
+        default: false
+      },
+      checkedInAt: Date,
+      location: {
+        latitude: Number,
+        longitude: Number
+      },
+      verified: {
+        type: Boolean,
+        default: false
+      },
+      distanceFromMeetingPoint: Number // in meters
+    },
+    tutor: {
+      checkedIn: {
+        type: Boolean,
+        default: false
+      },
+      checkedInAt: Date,
+      location: {
+        latitude: Number,
+        longitude: Number
+      },
+      verified: {
+        type: Boolean,
+        default: false
+      },
+      distanceFromMeetingPoint: Number // in meters
+    },
+    bothCheckedIn: {
+      type: Boolean,
+      default: false
+    },
+    bothCheckedInAt: Date
+  },
+  
+  checkOut: {
+    student: {
+      checkedOut: {
+        type: Boolean,
+        default: false
+      },
+      checkedOutAt: Date
+    },
+    tutor: {
+      checkedOut: {
+        type: Boolean,
+        default: false
+      },
+      checkedOutAt: Date
+    },
+    bothCheckedOut: {
+      type: Boolean,
+      default: false
+    },
+    bothCheckedOutAt: Date
+  },
+  
+  // Offline Session Status
+  offlineSession: {
+    status: {
+      type: String,
+      enum: ['scheduled', 'student_checked_in', 'tutor_checked_in', 
+             'both_checked_in', 'in_progress', 'completed', 'no_show'],
+      default: 'scheduled'
+    },
+    studentArrived: {
+      type: Boolean,
+      default: false
+    },
+    tutorArrived: {
+      type: Boolean,
+      default: false
+    },
+    runningLate: {
+      student: {
+        isLate: {
+          type: Boolean,
+          default: false
+        },
+        estimatedArrival: Date,
+        notifiedAt: Date,
+        reason: String
+      },
+      tutor: {
+        isLate: {
+          type: Boolean,
+          default: false
+        },
+        estimatedArrival: Date,
+        notifiedAt: Date,
+        reason: String
+      }
+    },
+    actualStartTime: Date,
+    actualEndTime: Date,
+    actualDuration: Number, // in minutes
+    waitingTime: Number // time between first and second check-in (minutes)
+  },
+  
+  // Safety Features
+  safety: {
+    emergencyContact: {
+      name: String,
+      phone: String,
+      relationship: String
+    },
+    sessionShared: {
+      type: Boolean,
+      default: false
+    },
+    sharedWith: [{
+      name: String,
+      phone: String,
+      email: String,
+      sharedAt: Date
+    }],
+    issues: [{
+      reportedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      issueType: {
+        type: String,
+        enum: ['safety_concern', 'harassment', 'no_show', 'location_issue', 'other']
+      },
+      description: String,
+      reportedAt: Date,
+      resolved: {
+        type: Boolean,
+        default: false
+      },
+      resolvedAt: Date,
+      resolution: String
+    }]
   },
   // Escrow Management
   escrow: {
@@ -529,11 +685,15 @@ bookingSchema.methods.completeSession = async function (sessionNotes) {
     this.actualDuration = Math.floor((this.sessionEndedAt - this.sessionStartedAt) / (1000 * 60));
   }
 
-  // Schedule escrow release
+  // Schedule escrow release based on configured delay
   if (this.escrow.status === 'held' && this.escrow.autoReleaseEnabled) {
     const releaseDate = new Date();
-    releaseDate.setHours(releaseDate.getHours() + this.escrow.releaseDelayHours);
+    const releaseDelayHours = this.escrow.releaseDelayHours || 1; // Default 1 hour if not set
+    releaseDate.setHours(releaseDate.getHours() + releaseDelayHours);
     this.escrow.releaseScheduledFor = releaseDate;
+    
+    console.log(`📅 Escrow release scheduled for: ${releaseDate.toISOString()}`);
+    console.log(`   (${releaseDelayHours} hours from now)`);
   }
 
   return await this.save();
@@ -589,11 +749,15 @@ bookingSchema.methods.endSession = async function (userId) {
   this.status = 'completed';
   this.completedAt = new Date();
 
-  // Schedule escrow release
+  // Schedule escrow release based on configured delay
   if (this.escrow.status === 'held' && this.escrow.autoReleaseEnabled) {
     const releaseDate = new Date();
-    releaseDate.setHours(releaseDate.getHours() + this.escrow.releaseDelayHours);
+    const releaseDelayHours = this.escrow.releaseDelayHours || 1; // Default 1 hour if not set
+    releaseDate.setHours(releaseDate.getHours() + releaseDelayHours);
     this.escrow.releaseScheduledFor = releaseDate;
+    
+    console.log(`📅 Escrow release scheduled for: ${releaseDate.toISOString()}`);
+    console.log(`   (${releaseDelayHours} hours from now)`);
   }
 
   return await this.save();
@@ -684,6 +848,206 @@ bookingSchema.methods.canStartSession = function () {
   });
 
   return now >= earlyStartTime && now <= lateStartTime;
+};
+
+// Method to check in (for offline sessions)
+bookingSchema.methods.checkIn = async function (userId, userRole, location) {
+  if (this.sessionType !== 'inPerson') {
+    throw new Error('Check-in is only available for in-person sessions');
+  }
+
+  if (this.status !== 'confirmed') {
+    throw new Error('Only confirmed bookings can be checked in');
+  }
+
+  const now = new Date();
+  
+  // Calculate distance from meeting point if location provided
+  let distanceFromMeetingPoint = null;
+  if (location && this.location.coordinates) {
+    distanceFromMeetingPoint = this.calculateDistance(
+      location.latitude,
+      location.longitude,
+      this.location.coordinates.latitude,
+      this.location.coordinates.longitude
+    );
+  }
+
+  if (userRole === 'student') {
+    if (this.checkIn.student.checkedIn) {
+      throw new Error('Student already checked in');
+    }
+    
+    this.checkIn.student.checkedIn = true;
+    this.checkIn.student.checkedInAt = now;
+    this.checkIn.student.location = location;
+    this.checkIn.student.distanceFromMeetingPoint = distanceFromMeetingPoint;
+    this.checkIn.student.verified = distanceFromMeetingPoint ? distanceFromMeetingPoint < 100 : false; // Within 100m
+    
+    this.offlineSession.studentArrived = true;
+    this.offlineSession.status = this.checkIn.tutor.checkedIn ? 'both_checked_in' : 'student_checked_in';
+    
+  } else if (userRole === 'tutor') {
+    if (this.checkIn.tutor.checkedIn) {
+      throw new Error('Tutor already checked in');
+    }
+    
+    this.checkIn.tutor.checkedIn = true;
+    this.checkIn.tutor.checkedInAt = now;
+    this.checkIn.tutor.location = location;
+    this.checkIn.tutor.distanceFromMeetingPoint = distanceFromMeetingPoint;
+    this.checkIn.tutor.verified = distanceFromMeetingPoint ? distanceFromMeetingPoint < 100 : false; // Within 100m
+    
+    this.offlineSession.tutorArrived = true;
+    this.offlineSession.status = this.checkIn.student.checkedIn ? 'both_checked_in' : 'tutor_checked_in';
+  }
+
+  // If both checked in
+  if (this.checkIn.student.checkedIn && this.checkIn.tutor.checkedIn) {
+    this.checkIn.bothCheckedIn = true;
+    this.checkIn.bothCheckedInAt = now;
+    this.offlineSession.status = 'both_checked_in';
+    
+    // Calculate waiting time
+    const firstCheckIn = this.checkIn.student.checkedInAt < this.checkIn.tutor.checkedInAt
+      ? this.checkIn.student.checkedInAt
+      : this.checkIn.tutor.checkedInAt;
+    this.offlineSession.waitingTime = Math.floor((now - firstCheckIn) / (1000 * 60));
+    
+    // Auto-start session
+    this.offlineSession.actualStartTime = now;
+    this.offlineSession.status = 'in_progress';
+    this.sessionStartedAt = now;
+  }
+
+  return await this.save();
+};
+
+// Method to check out (for offline sessions)
+bookingSchema.methods.checkOut = async function (userId, userRole) {
+  if (this.sessionType !== 'inPerson') {
+    throw new Error('Check-out is only available for in-person sessions');
+  }
+
+  if (!this.checkIn.bothCheckedIn) {
+    throw new Error('Both parties must check in before checking out');
+  }
+
+  const now = new Date();
+
+  if (userRole === 'student') {
+    if (this.checkOut.student.checkedOut) {
+      throw new Error('Student already checked out');
+    }
+    
+    this.checkOut.student.checkedOut = true;
+    this.checkOut.student.checkedOutAt = now;
+    
+  } else if (userRole === 'tutor') {
+    if (this.checkOut.tutor.checkedOut) {
+      throw new Error('Tutor already checked out');
+    }
+    
+    this.checkOut.tutor.checkedOut = true;
+    this.checkOut.tutor.checkedOutAt = now;
+  }
+
+  // If both checked out
+  if (this.checkOut.student.checkedOut && this.checkOut.tutor.checkedOut) {
+    this.checkOut.bothCheckedOut = true;
+    this.checkOut.bothCheckedOutAt = now;
+    
+    // Complete session
+    this.status = 'completed';
+    this.completedAt = now;
+    this.offlineSession.status = 'completed';
+    this.offlineSession.actualEndTime = now;
+    this.sessionEndedAt = now;
+    
+    // Calculate actual duration
+    if (this.offlineSession.actualStartTime) {
+      this.offlineSession.actualDuration = Math.floor(
+        (now - this.offlineSession.actualStartTime) / (1000 * 60)
+      );
+      this.actualDuration = this.offlineSession.actualDuration;
+    }
+    
+    // Schedule escrow release based on configured delay
+    if (this.escrow.status === 'held' && this.escrow.autoReleaseEnabled) {
+      const releaseDate = new Date();
+      const releaseDelayHours = this.escrow.releaseDelayHours || 1; // Default 1 hour if not set
+      releaseDate.setHours(releaseDate.getHours() + releaseDelayHours);
+      this.escrow.releaseScheduledFor = releaseDate;
+      
+      console.log(`📅 Escrow release scheduled for: ${releaseDate.toISOString()}`);
+      console.log(`   (${releaseDelayHours} hours from now)`);
+    }
+  }
+
+  return await this.save();
+};
+
+// Method to notify running late
+bookingSchema.methods.notifyRunningLate = async function (userId, userRole, estimatedArrival, reason) {
+  if (this.sessionType !== 'inPerson') {
+    throw new Error('Running late notification is only for in-person sessions');
+  }
+
+  const now = new Date();
+
+  if (userRole === 'student') {
+    this.offlineSession.runningLate.student.isLate = true;
+    this.offlineSession.runningLate.student.estimatedArrival = estimatedArrival;
+    this.offlineSession.runningLate.student.notifiedAt = now;
+    this.offlineSession.runningLate.student.reason = reason;
+  } else if (userRole === 'tutor') {
+    this.offlineSession.runningLate.tutor.isLate = true;
+    this.offlineSession.runningLate.tutor.estimatedArrival = estimatedArrival;
+    this.offlineSession.runningLate.tutor.notifiedAt = now;
+    this.offlineSession.runningLate.tutor.reason = reason;
+  }
+
+  return await this.save();
+};
+
+// Method to report safety issue
+bookingSchema.methods.reportSafetyIssue = async function (userId, issueType, description) {
+  this.safety.issues.push({
+    reportedBy: userId,
+    issueType,
+    description,
+    reportedAt: new Date(),
+    resolved: false
+  });
+
+  return await this.save();
+};
+
+// Method to share session details
+bookingSchema.methods.shareSession = async function (contacts) {
+  this.safety.sessionShared = true;
+  this.safety.sharedWith = contacts.map(contact => ({
+    ...contact,
+    sharedAt: new Date()
+  }));
+
+  return await this.save();
+};
+
+// Helper method to calculate distance between two coordinates (Haversine formula)
+bookingSchema.methods.calculateDistance = function (lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance in meters
 };
 
 // Method to add rating

@@ -207,10 +207,10 @@ router.get('/:id', async (req, res) => {
     }
 
     const TutorProfile = require('../models/TutorProfile');
+    const Review = require('../models/Review');
     
     const tutor = await TutorProfile.findById(req.params.id)
-      .populate('userId', 'firstName lastName profilePicture')
-      .populate('subjects', 'name');
+      .populate('userId', 'firstName lastName profilePicture email phone');
 
     if (!tutor) {
       return res.status(404).json({
@@ -219,15 +219,61 @@ router.get('/:id', async (req, res) => {
       });
     }
 
+    // Calculate rating and review stats
+    const reviews = await Review.find({ tutorId: tutor._id });
+    const totalReviews = reviews.length;
+    const averageRating = totalReviews > 0
+      ? reviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews
+      : 0;
+
+    // Format response with flattened structure for easy access
+    const tutorData = {
+      _id: tutor._id,
+      userId: tutor.userId._id,
+      name: `${tutor.userId.firstName} ${tutor.userId.lastName}`,
+      firstName: tutor.userId.firstName,
+      lastName: tutor.userId.lastName,
+      email: tutor.userId.email,
+      phone: tutor.userId.phone,
+      profilePicture: tutor.userId.profilePicture || tutor.profilePhoto,
+      bio: tutor.bio,
+      headline: tutor.headline,
+      experience: tutor.experience,
+      education: tutor.education,
+      subjects: tutor.subjects,
+      pricing: tutor.pricing,
+      hourlyRate: tutor.pricing?.hourlyRate,
+      teachingMode: tutor.teachingMode,
+      location: tutor.location,
+      timezone: tutor.timezone,
+      profilePhoto: tutor.profilePhoto,
+      introVideo: tutor.introVideo,
+      gallery: tutor.gallery,
+      certifications: tutor.certifications,
+      languages: tutor.languages,
+      rating: averageRating,
+      totalReviews: totalReviews,
+      totalSessions: tutor.stats?.totalSessions || 0,
+      completedSessions: tutor.stats?.completedSessions || 0,
+      totalEarnings: tutor.stats?.totalEarnings || 0,
+      isActive: tutor.isActive,
+      isAvailable: tutor.isAvailable,
+      isVerified: tutor.isVerified,
+      verificationStatus: tutor.verificationStatus,
+      createdAt: tutor.createdAt,
+      updatedAt: tutor.updatedAt
+    };
+
     res.json({
       success: true,
-      data: { tutor }
+      data: { tutor: tutorData }
     });
   } catch (error) {
     console.error('Get tutor error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to get tutor'
+      message: 'Failed to get tutor',
+      error: error.message
     });
   }
 });

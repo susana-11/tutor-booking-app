@@ -10,6 +10,7 @@ router.get('/slots', authenticate, availabilitySlotController.getAvailabilitySlo
 router.post('/slots', authenticate, authorize('tutor'), availabilitySlotController.createAvailabilitySlot);
 router.post('/bulk', authenticate, authorize('tutor'), availabilitySlotController.createBulkAvailability);
 router.put('/slots/:slotId', authenticate, authorize('tutor'), availabilitySlotController.updateAvailabilitySlot);
+router.put('/slots/:slotId/toggle-availability', authenticate, authorize('tutor'), availabilitySlotController.toggleSlotAvailability);
 router.delete('/slots/:slotId', authenticate, authorize('tutor'), availabilitySlotController.deleteAvailabilitySlot);
 
 // Session management routes

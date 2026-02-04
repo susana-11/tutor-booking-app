@@ -4,18 +4,38 @@ const cron = require('node-cron');
 
 class EscrowService {
   constructor() {
+    // Escrow configuration (can be overridden by environment variables)
+    this.config = {
+      // Release delay after session completion (in hours)
+      releaseDelayHours: parseInt(process.env.ESCROW_RELEASE_DELAY_HOURS) || 1, // Default 1 hour for testing
+      
+      // Cancellation refund rules (hours before session)
+      refundRules: {
+        full: parseInt(process.env.ESCROW_REFUND_FULL_HOURS) || 24,      // 100% refund if cancelled 24+ hours before
+        partial: parseInt(process.env.ESCROW_REFUND_PARTIAL_HOURS) || 12, // 50% refund if cancelled 12-24 hours before
+        partialPercentage: parseInt(process.env.ESCROW_REFUND_PARTIAL_PERCENT) || 50, // 50% refund
+        none: parseInt(process.env.ESCROW_REFUND_NONE_HOURS) || 12        // 0% refund if less than 12 hours before
+      },
+      
+      // Scheduler frequency (in minutes)
+      schedulerFrequency: parseInt(process.env.ESCROW_SCHEDULER_FREQUENCY) || 10 // Check every 10 minutes for testing
+    };
+    
+    console.log('⚙️ Escrow Service Configuration:', this.config);
     this.startScheduler();
   }
 
   // Start the escrow release scheduler
   startScheduler() {
-    // Run every hour
-    cron.schedule('0 * * * *', async () => {
+    // Run every X minutes (configurable for testing)
+    const cronExpression = `*/${this.config.schedulerFrequency} * * * *`;
+    
+    cron.schedule(cronExpression, async () => {
       console.log('🔄 Running escrow release check...');
       await this.processScheduledReleases();
     });
 
-    console.log('✅ Escrow scheduler started');
+    console.log(`✅ Escrow scheduler started (runs every ${this.config.schedulerFrequency} minutes)`);
   }
 
   // Process all scheduled escrow releases
@@ -145,11 +165,56 @@ class EscrowService {
     }
   }
 
-  // Refund escrow (for cancelled bookings)
+  // Calculate refund amount based on cancellation timing
+  calculateRefundAmount(booking) {
+    const now = new Date();
+    const sessionDateTime = new Date(booking.sessionDate);
+    const [hours, minutes] = booking.startTime.split(':');
+    sessionDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+    // Calculate hours until session
+    const hoursUntilSession = (sessionDateTime - now) / (1000 * 60 * 60);
+
+    let refundPercentage = 0;
+    let refundReason = '';
+
+    if (hoursUntilSession >= this.config.refundRules.full) {
+      // Full refund (100%)
+      refundPercentage = 100;
+      refundReason = `Cancelled ${Math.floor(hoursUntilSession)} hours before session`;
+    } else if (hoursUntilSession >= this.config.refundRules.partial) {
+      // Partial refund (50% or configured percentage)
+      refundPercentage = this.config.refundRules.partialPercentage;
+      refundReason = `Cancelled ${Math.floor(hoursUntilSession)} hours before session`;
+    } else if (hoursUntilSession >= 0) {
+      // No refund (less than 12 hours before session)
+      refundPercentage = 0;
+      refundReason = `Cancelled less than ${this.config.refundRules.none} hours before session`;
+    } else {
+      // Session already passed - no refund
+      refundPercentage = 0;
+      refundReason = 'Session time has passed';
+    }
+
+    const refundAmount = (booking.totalAmount * refundPercentage) / 100;
+    const platformFeeRetained = booking.totalAmount - refundAmount;
+
+    return {
+      refundAmount,
+      refundPercentage,
+      platformFeeRetained,
+      hoursUntilSession: Math.max(0, hoursUntilSession),
+      refundReason,
+      eligible: refundPercentage > 0
+    };
+  }
+
+  // Refund escrow (for cancelled bookings with refund rules)
   async refundEscrow(bookingId, reason) {
     try {
       const booking = await Booking.findById(bookingId)
-        .populate('studentId', 'firstName lastName email');
+        .populate('studentId', 'firstName lastName email')
+        .populate('tutorId', 'firstName lastName email');
 
       if (!booking) {
         throw new Error('Booking not found');
@@ -159,20 +224,83 @@ class EscrowService {
         throw new Error('Escrow is not in held status');
       }
 
+      // Calculate refund amount based on cancellation timing
+      const refundCalculation = this.calculateRefundAmount(booking);
+
+      // Update booking with refund information
+      booking.refundAmount = refundCalculation.refundAmount;
+      booking.refundReason = reason || refundCalculation.refundReason;
+      booking.refundStatus = refundCalculation.refundAmount > 0 ? 'processing' : 'none';
+      
+      // Update payment status
+      if (refundCalculation.refundPercentage === 100) {
+        booking.payment.status = 'refunded';
+        booking.paymentStatus = 'refunded';
+      } else if (refundCalculation.refundPercentage > 0) {
+        booking.payment.status = 'partially_refunded';
+        booking.paymentStatus = 'partially_refunded';
+      }
+
       // Update escrow status
       booking.escrow.status = 'refunded';
       booking.escrow.releasedAt = new Date();
       await booking.save();
 
+      // If partial refund, release remaining amount to tutor
+      if (refundCalculation.refundPercentage > 0 && refundCalculation.refundPercentage < 100) {
+        const tutorAmount = booking.tutorEarnings * (1 - refundCalculation.refundPercentage / 100);
+        
+        // Update tutor balance (move from pending to available)
+        const TutorProfile = require('../models/TutorProfile');
+        const tutorProfile = await TutorProfile.findById(booking.tutorProfileId);
+        if (tutorProfile) {
+          tutorProfile.balance.pending -= booking.tutorEarnings;
+          tutorProfile.balance.available += tutorAmount;
+          await tutorProfile.save();
+        }
+
+        // Notify tutor about partial payment
+        await notificationService.createNotification({
+          userId: booking.tutorId._id,
+          type: 'payment_received',
+          title: 'Partial Payment Received',
+          body: `You received ETB ${tutorAmount.toFixed(2)} for cancelled session (${refundCalculation.refundPercentage}% refunded to student)`,
+          data: { bookingId: booking._id, amount: tutorAmount },
+          priority: 'normal'
+        });
+      } else if (refundCalculation.refundPercentage === 0) {
+        // No refund - release full amount to tutor
+        await this.releaseEscrow(booking);
+      }
+
       // Notify student about refund
-      await notificationService.createNotification({
-        userId: booking.studentId._id,
-        type: 'payment_refunded',
-        title: 'Payment Refunded',
-        body: `Your payment of ETB ${booking.totalAmount} has been refunded.`,
-        data: { bookingId: booking._id, reason },
-        priority: 'normal'
-      });
+      if (refundCalculation.refundAmount > 0) {
+        await notificationService.createNotification({
+          userId: booking.studentId._id,
+          type: 'payment_refunded',
+          title: refundCalculation.refundPercentage === 100 ? 'Full Refund Processed' : 'Partial Refund Processed',
+          body: `ETB ${refundCalculation.refundAmount.toFixed(2)} (${refundCalculation.refundPercentage}%) has been refunded to your account.`,
+          data: { 
+            bookingId: booking._id, 
+            reason: refundCalculation.refundReason,
+            refundAmount: refundCalculation.refundAmount,
+            refundPercentage: refundCalculation.refundPercentage
+          },
+          priority: 'high'
+        });
+      } else {
+        await notificationService.createNotification({
+          userId: booking.studentId._id,
+          type: 'cancellation_no_refund',
+          title: 'Booking Cancelled - No Refund',
+          body: `Your booking was cancelled less than ${this.config.refundRules.none} hours before the session. No refund is available.`,
+          data: { 
+            bookingId: booking._id, 
+            reason: refundCalculation.refundReason
+          },
+          priority: 'normal'
+        });
+      }
 
       // In a real implementation, process actual refund here
       // Examples:
@@ -180,13 +308,17 @@ class EscrowService {
       // - Chapa refund
       // - Add to student's wallet balance
 
-      console.log(`💸 Escrow refunded: ETB ${booking.totalAmount} to student ${booking.studentId._id}`);
+      console.log(`💸 Escrow refunded: ETB ${refundCalculation.refundAmount} (${refundCalculation.refundPercentage}%) to student ${booking.studentId._id}`);
+      console.log(`   Platform retained: ETB ${refundCalculation.platformFeeRetained}`);
 
       return {
         success: true,
         bookingId: booking._id,
-        amount: booking.totalAmount,
-        refundedAt: booking.escrow.releasedAt
+        refundAmount: refundCalculation.refundAmount,
+        refundPercentage: refundCalculation.refundPercentage,
+        platformFeeRetained: refundCalculation.platformFeeRetained,
+        refundedAt: booking.escrow.releasedAt,
+        refundReason: refundCalculation.refundReason
       };
     } catch (error) {
       console.error('Refund escrow error:', error);

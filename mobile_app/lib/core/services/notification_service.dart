@@ -51,12 +51,25 @@ class NotificationService {
   // Get unread count
   Future<int> getUnreadCount() async {
     try {
-      final response = await getNotifications(unreadOnly: true, limit: 1);
-      return _unreadCount;
+      final response = await _apiService.get('/notifications/unread-count');
+      
+      if (response.success && response.data != null) {
+        final data = response.data as Map<String, dynamic>;
+        _unreadCount = data['count'] ?? 0;
+        _notificationCountController.add(_unreadCount);
+        return _unreadCount;
+      }
+      
+      return 0;
     } catch (e) {
       print('Error getting unread count: $e');
       return 0;
     }
+  }
+  
+  // Refresh unread count
+  Future<void> refreshUnreadCount() async {
+    await getUnreadCount();
   }
   
   // Mark notification as read

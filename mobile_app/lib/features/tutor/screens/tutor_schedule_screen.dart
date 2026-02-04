@@ -616,73 +616,318 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
     );
   }
 
-  void _handleSlotAction(String action, AvailabilitySlot slot) {
+  void _handleSlotAction(String action, AvailabilitySlot slot) async {
     switch (action) {
       case 'make_unavailable':
-        // TODO: Update slot availability
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Slot marked as unavailable')),
-        );
+        await _makeSlotUnavailable(slot);
         break;
       case 'make_available':
-        // TODO: Update slot availability
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Slot marked as available')),
-        );
+        await _makeSlotAvailable(slot);
         break;
       case 'view_booking':
-        // TODO: Navigate to booking details
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Viewing booking details')),
-        );
+        _viewBookingDetails(slot);
         break;
       case 'contact_student':
-        // TODO: Navigate to chat with student
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Opening chat with student')),
-        );
+        _contactStudent(slot.booking!);
         break;
       case 'edit':
-        _editTimeSlot(slot);
+        await _editTimeSlot(slot);
         break;
       case 'delete':
-        _deleteTimeSlot(slot);
+        await _deleteTimeSlot(slot);
         break;
     }
   }
 
-  void _editTimeSlot(AvailabilitySlot slot) {
-    // TODO: Show edit dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Edit time slot functionality coming soon')),
+  Future<void> _makeSlotUnavailable(AvailabilitySlot slot) async {
+    try {
+      // First attempt without cancelling booking
+      final response = await _availabilityService.toggleSlotAvailability(
+        slotId: slot.id,
+        makeAvailable: false,
+        cancelBooking: false,
+      );
+
+      if (response.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Slot marked as unavailable')),
+        );
+        _loadScheduleData();
+      } else {
+        // Check if it's a pending booking that needs confirmation
+        if (response.error?.contains('pending booking') == true) {
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Pending Booking Exists'),
+              content: const Text(
+                'This slot has a pending booking request. Do you want to cancel the booking and make the slot unavailable?'
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Keep Booking'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Cancel Booking', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          );
+
+          if (confirmed == true) {
+            // Try again with cancelBooking = true
+            final retryResponse = await _availabilityService.toggleSlotAvailability(
+              slotId: slot.id,
+              makeAvailable: false,
+              cancelBooking: true,
+            );
+
+            if (retryResponse.success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('✅ Booking cancelled and slot marked unavailable'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              _loadScheduleData();
+            } else {
+              throw Exception(retryResponse.error);
+            }
+          }
+        } else if (response.error?.contains('confirmed booking') == true) {
+          // Show error for confirmed booking
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Cannot Make Unavailable'),
+              content: const Text(
+                'This slot has a confirmed booking. You cannot make it unavailable.\n\n'
+                'To proceed, you must first cancel the booking using the proper cancellation process.'
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _cancelSession(slot);
+                  },
+                  child: const Text('Cancel Booking'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          throw Exception(response.error);
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to make unavailable: $e')),
+      );
+    }
+  }
+
+  Future<void> _makeSlotAvailable(AvailabilitySlot slot) async {
+    try {
+      final response = await _availabilityService.toggleSlotAvailability(
+        slotId: slot.id,
+        makeAvailable: true,
+      );
+
+      if (response.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Slot marked as available')),
+        );
+        _loadScheduleData();
+      } else {
+        throw Exception(response.error);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to make available: $e')),
+      );
+    }
+  }
+
+  void _viewBookingDetails(AvailabilitySlot slot) {
+    // Navigate to booking details
+    context.push('/tutor/bookings');
+  }
+
+  Future<void> _editTimeSlot(AvailabilitySlot slot) async {
+    // Check if slot is booked
+    if (slot.isBooked && slot.booking!.status == 'confirmed') {
+      // Show error dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Cannot Edit Time Slot'),
+          content: const Text(
+            'This slot has a confirmed booking. You cannot directly edit the time.\n\n'
+            'To change the time, use the reschedule request system which requires student approval.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // TODO: Navigate to reschedule request
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Use reschedule request from bookings screen')),
+                );
+              },
+              child: const Text('Go to Bookings'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // Show edit dialog
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLG)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        expand: false,
+        builder: (context, scrollController) => EditAvailabilitySheet(
+          scrollController: scrollController,
+          slot: slot,
+          onSaved: _loadScheduleData,
+        ),
+      ),
     );
   }
 
-  void _deleteTimeSlot(AvailabilitySlot slot) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Time Slot'),
-        content: Text('Are you sure you want to delete the ${slot.timeSlot.displayTime} slot?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+  Future<void> _deleteTimeSlot(AvailabilitySlot slot) async {
+    try {
+      // First attempt without cancelling booking
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Delete Time Slot'),
+          content: Text(
+            'Are you sure you want to delete the ${slot.timeSlot.displayTime} slot?\n\n'
+            'This action cannot be undone.'
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: Delete slot
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      final response = await _availabilityService.deleteAvailabilitySlot(
+        slot.id,
+        cancelBooking: false,
+      );
+
+      if (response.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Time slot deleted')),
+        );
+        _loadScheduleData();
+      } else {
+        // Check if it's a pending booking that needs confirmation
+        if (response.error?.contains('pending booking') == true) {
+          final cancelConfirmed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Pending Booking Exists'),
+              content: const Text(
+                'This slot has a pending booking request. Do you want to decline the booking and delete the slot?'
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Keep Slot'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Decline & Delete', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          );
+
+          if (cancelConfirmed == true) {
+            // Try again with cancelBooking = true
+            final retryResponse = await _availabilityService.deleteAvailabilitySlot(
+              slot.id,
+              cancelBooking: true,
+            );
+
+            if (retryResponse.success) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Time slot deleted')),
+                const SnackBar(
+                  content: Text('✅ Booking declined and slot deleted'),
+                  backgroundColor: Colors.green,
+                ),
               );
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+              _loadScheduleData();
+            } else {
+              throw Exception(retryResponse.error);
+            }
+          }
+        } else if (response.error?.contains('confirmed booking') == true) {
+          // Show error for confirmed booking
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Cannot Delete Slot'),
+              content: const Text(
+                'This slot has a confirmed booking. You cannot delete it.\n\n'
+                'To proceed, you must first cancel the booking using the proper cancellation process, which may include refund policies based on timing.'
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _cancelSession(slot);
+                  },
+                  child: const Text('Cancel Booking'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          throw Exception(response.error);
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete slot: $e')),
+      );
+    }
   }
 
   Widget _buildSessionsView() {

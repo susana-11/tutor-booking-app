@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../core/services/dashboard_service.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
@@ -15,11 +16,18 @@ class StudentDashboardScreen extends StatefulWidget {
 
 class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   final NotificationService _notificationService = NotificationService();
+  final DashboardService _dashboardService = DashboardService();
+  
   int _unreadCount = 0;
+  List<Map<String, dynamic>> _upcomingSessions = [];
+  List<Map<String, dynamic>> _recentActivity = [];
+  Map<String, dynamic> _stats = {};
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _loadDashboardData();
     _loadUnreadCount();
     
     // Listen to notification count updates
@@ -38,6 +46,97 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       setState(() {
         _unreadCount = count;
       });
+    }
+  }
+
+  Future<void> _loadDashboardData() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      final response = await _dashboardService.getStudentDashboard();
+      
+      if (response.success && response.data != null) {
+        final data = response.data!['data'] ?? response.data;
+        
+        setState(() {
+          _upcomingSessions = List<Map<String, dynamic>>.from(data['upcomingSessions'] ?? []);
+          _recentActivity = List<Map<String, dynamic>>.from(data['recentActivity'] ?? []);
+          _stats = Map<String, dynamic>.from(data['stats'] ?? {});
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      print('Error loading dashboard data: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final sessionDay = DateTime(date.year, date.month, date.day);
+    
+    if (sessionDay == today) {
+      return 'Today';
+    } else if (sessionDay == tomorrow) {
+      return 'Tomorrow';
+    } else {
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}';
+    }
+  }
+
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inDays > 7) {
+      return '${(difference.inDays / 7).floor()}w ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  IconData _getActivityIcon(String iconName) {
+    switch (iconName) {
+      case 'check_circle':
+        return Icons.check_circle;
+      case 'done_all':
+        return Icons.done_all;
+      case 'cancel':
+        return Icons.cancel;
+      case 'schedule':
+        return Icons.schedule;
+      case 'notifications':
+        return Icons.notifications;
+      default:
+        return Icons.info;
+    }
+  }
+
+  Color _getActivityColor(String colorName) {
+    switch (colorName) {
+      case 'green':
+        return Colors.green;
+      case 'teal':
+        return Colors.teal;
+      case 'red':
+        return Colors.red;
+      case 'orange':
+        return Colors.orange;
+      case 'blue':
+        return Colors.blue;
+      default:
+        return Colors.grey;
     }
   }
   @override
@@ -199,6 +298,28 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 
                 const SizedBox(height: AppTheme.spacingXL),
                 
+                // Upcoming Sessions Section
+                if (_upcomingSessions.isNotEmpty) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Upcoming Sessions',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => context.push('/student-bookings'),
+                        child: const Text('View All'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppTheme.spacingMD),
+                  ...(_upcomingSessions.map((session) => _buildSessionCard(session))),
+                  const SizedBox(height: AppTheme.spacingXL),
+                ],
+                
                 // Recent Activity Section
                 Text(
                   'Recent Activity',
@@ -209,48 +330,54 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 
                 const SizedBox(height: AppTheme.spacingLG),
                 
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppTheme.spacingLG),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(AppTheme.radiusLG),
-                    border: Border.all(color: Colors.grey[200]!),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.history,
-                        size: 48,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: AppTheme.spacingMD),
-                      Text(
-                        'No recent activity',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      const SizedBox(height: AppTheme.spacingSM),
-                      Text(
-                        'Start by finding a tutor to begin your learning journey!',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[500],
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: AppTheme.spacingMD),
-                      ElevatedButton(
-                        onPressed: () => context.push('/tutor-search'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('Find Tutors'),
-                      ),
-                    ],
-                  ),
-                ),
+                _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _recentActivity.isEmpty
+                        ? Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppTheme.spacingLG),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(AppTheme.radiusLG),
+                              border: Border.all(color: Colors.grey[200]!),
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.history,
+                                  size: 48,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: AppTheme.spacingMD),
+                                Text(
+                                  'No recent activity',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(height: AppTheme.spacingSM),
+                                Text(
+                                  'Start by finding a tutor to begin your learning journey!',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.grey[500],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: AppTheme.spacingMD),
+                                ElevatedButton(
+                                  onPressed: () => context.push('/tutor-search'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryColor,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: const Text('Find Tutors'),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Column(
+                            children: _recentActivity.map((activity) => _buildActivityItem(activity)).toList(),
+                          ),
                 
                 const SizedBox(height: AppTheme.spacingXL),
                 
@@ -347,6 +474,80 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSessionCard(Map<String, dynamic> session) {
+    final sessionDate = DateTime.tryParse(session['sessionDate'] ?? '');
+    final dateStr = sessionDate != null ? _formatDate(sessionDate) : 'TBD';
+    final timeStr = '${session['startTime']} - ${session['endTime']}';
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundImage: session['tutorPhoto'] != null 
+              ? NetworkImage(session['tutorPhoto'])
+              : null,
+          child: session['tutorPhoto'] == null 
+              ? Text(session['tutorName']?.substring(0, 1) ?? 'T')
+              : null,
+        ),
+        title: Text(
+          session['tutorName'] ?? 'Tutor',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(session['subject'] ?? 'Session'),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(dateStr, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                const SizedBox(width: 12),
+                Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(timeStr, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+              ],
+            ),
+          ],
+        ),
+        trailing: session['status'] == 'pending'
+            ? Chip(
+                label: const Text('Pending', style: TextStyle(fontSize: 10)),
+                backgroundColor: Colors.orange[100],
+              )
+            : null,
+        onTap: () {
+          context.push('/student-bookings');
+        },
+      ),
+    );
+  }
+
+  Widget _buildActivityItem(Map<String, dynamic> activity) {
+    final time = DateTime.tryParse(activity['time'] ?? '');
+    final timeAgo = time != null ? _getTimeAgo(time) : '';
+    final icon = _getActivityIcon(activity['icon'] ?? 'info');
+    final color = _getActivityColor(activity['color'] ?? 'grey');
+    
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withOpacity(0.1),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(
+        activity['message'] ?? '',
+        style: const TextStyle(fontSize: 14),
+      ),
+      subtitle: Text(
+        timeAgo,
+        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+      ),
+      dense: true,
     );
   }
 }

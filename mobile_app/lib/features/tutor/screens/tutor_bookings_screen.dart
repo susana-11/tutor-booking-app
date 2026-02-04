@@ -6,6 +6,8 @@ import '../../../core/services/booking_service.dart';
 import '../../../core/services/socket_service.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/widgets/session_action_button.dart';
+import '../../../core/widgets/reschedule_request_dialog.dart';
+import '../../../core/widgets/reschedule_requests_dialog.dart';
 
 class TutorBookingsScreen extends StatefulWidget {
   const TutorBookingsScreen({super.key});
@@ -69,27 +71,112 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
     setState(() => _isLoading = true);
 
     try {
-      // Load all booking statuses
-      final futures = await Future.wait([
-        _bookingService.getBookings(status: 'pending'),
-        _bookingService.getBookings(status: 'confirmed'),
-        _bookingService.getBookings(status: 'completed'),
-        _bookingService.getBookings(status: 'cancelled'),
-        _bookingService.getBookings(status: 'declined'), // Also load declined bookings
-      ]);
+      // Load all bookings at once
+      final response = await _bookingService.getBookings();
 
-      if (mounted) {
-        setState(() {
-          _pendingBookings = futures[0].success ? futures[0].data! : [];
-          _confirmedBookings = futures[1].success ? futures[1].data! : [];
-          _completedBookings = futures[2].success ? futures[2].data! : [];
-          // Combine cancelled and declined bookings
-          _cancelledBookings = [
-            ...(futures[3].success ? futures[3].data! : []),
-            ...(futures[4].success ? futures[4].data! : []),
-          ];
-          _isLoading = false;
+      if (response.success && response.data != null) {
+        final allBookings = response.data as List<Map<String, dynamic>>;
+        
+        // Filter bookings by status
+        final now = DateTime.now();
+        final pendingList = <Map<String, dynamic>>[];
+        final confirmedList = <Map<String, dynamic>>[];
+        final completedList = <Map<String, dynamic>>[];
+        final cancelledList = <Map<String, dynamic>>[];
+        
+        for (var booking in allBookings) {
+          final status = booking['status'] as String?;
+          final sessionDateStr = booking['sessionDate'] as String?;
+          
+          if (status == null) continue;
+          
+          // Parse session date
+          DateTime? sessionDate;
+          if (sessionDateStr != null) {
+            try {
+              sessionDate = DateTime.parse(sessionDateStr);
+            } catch (e) {
+              print('Error parsing date: $sessionDateStr');
+            }
+          }
+          
+          // Categorize bookings
+          if (status == 'pending') {
+            // Only show pending if date is in the future or today
+            if (sessionDate != null) {
+              final sessionDay = DateTime(sessionDate.year, sessionDate.month, sessionDate.day);
+              final today = DateTime(now.year, now.month, now.day);
+              if (sessionDay.isAfter(today) || sessionDay.isAtSameMomentAs(today)) {
+                pendingList.add(booking);
+              } else {
+                // Past date - move to cancelled
+                cancelledList.add(booking);
+              }
+            } else {
+              pendingList.add(booking);
+            }
+          } else if (status == 'confirmed') {
+            // Only show confirmed if date is in the future or today
+            if (sessionDate != null) {
+              final sessionDay = DateTime(sessionDate.year, sessionDate.month, sessionDate.day);
+              final today = DateTime(now.year, now.month, now.day);
+              if (sessionDay.isAfter(today) || sessionDay.isAtSameMomentAs(today)) {
+                confirmedList.add(booking);
+              } else {
+                // Past date but not completed - move to cancelled
+                cancelledList.add(booking);
+              }
+            } else {
+              confirmedList.add(booking);
+            }
+          } else if (status == 'completed') {
+            completedList.add(booking);
+          } else if (status == 'cancelled' || status == 'declined') {
+            cancelledList.add(booking);
+          }
+        }
+        
+        // Sort by date
+        pendingList.sort((a, b) {
+          final dateA = DateTime.tryParse(a['sessionDate'] ?? '') ?? DateTime.now();
+          final dateB = DateTime.tryParse(b['sessionDate'] ?? '') ?? DateTime.now();
+          return dateA.compareTo(dateB); // Earliest first
         });
+        
+        confirmedList.sort((a, b) {
+          final dateA = DateTime.tryParse(a['sessionDate'] ?? '') ?? DateTime.now();
+          final dateB = DateTime.tryParse(b['sessionDate'] ?? '') ?? DateTime.now();
+          return dateA.compareTo(dateB); // Earliest first
+        });
+        
+        completedList.sort((a, b) {
+          final dateA = DateTime.tryParse(a['sessionDate'] ?? '') ?? DateTime.now();
+          final dateB = DateTime.tryParse(b['sessionDate'] ?? '') ?? DateTime.now();
+          return dateB.compareTo(dateA); // Most recent first
+        });
+        
+        cancelledList.sort((a, b) {
+          final dateA = DateTime.tryParse(a['sessionDate'] ?? '') ?? DateTime.now();
+          final dateB = DateTime.tryParse(b['sessionDate'] ?? '') ?? DateTime.now();
+          return dateB.compareTo(dateA); // Most recent first
+        });
+        
+        if (mounted) {
+          setState(() {
+            _pendingBookings = pendingList;
+            _confirmedBookings = confirmedList;
+            _completedBookings = completedList;
+            _cancelledBookings = cancelledList;
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response.error ?? 'Failed to load bookings')),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -601,6 +688,18 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
                 ),
               ],
             ),
+            
+            const SizedBox(height: AppTheme.spacingSM),
+            
+            // View reschedule requests button
+            OutlinedButton.icon(
+              onPressed: () => _viewRescheduleRequests(booking),
+              icon: const Icon(Icons.history, size: 16),
+              label: const Text('View Reschedule Requests', style: TextStyle(fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              ),
+            ),
           ],
         ),
       ),
@@ -1029,9 +1128,24 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
   }
 
   void _rescheduleSession(Map<String, dynamic> booking) async {
-    // TODO: Navigate to reschedule screen or show reschedule dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Rescheduling session with ${booking['studentName'] ?? booking['student']?['firstName']}')),
+    // Show reschedule request dialog
+    showDialog(
+      context: context,
+      builder: (context) => RescheduleRequestDialog(
+        booking: booking,
+        onSuccess: _loadBookings,
+      ),
+    );
+  }
+
+  void _viewRescheduleRequests(Map<String, dynamic> booking) {
+    // Show reschedule requests dialog
+    showDialog(
+      context: context,
+      builder: (context) => RescheduleRequestsDialog(
+        booking: booking,
+        onSuccess: _loadBookings,
+      ),
     );
   }
 

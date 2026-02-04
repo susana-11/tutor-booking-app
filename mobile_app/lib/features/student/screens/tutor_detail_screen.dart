@@ -21,7 +21,9 @@ class _TutorDetailScreenState extends State<TutorDetailScreen> {
   final ChatService _chatService = ChatService();
   
   Map<String, dynamic>? _tutor;
+  List<dynamic> _reviews = [];
   bool _isLoading = true;
+  bool _isLoadingReviews = false;
   String? _error;
 
   @override
@@ -44,6 +46,9 @@ class _TutorDetailScreenState extends State<TutorDetailScreen> {
           _tutor = response.data;
           _isLoading = false;
         });
+        
+        // Load reviews after tutor details are loaded
+        _loadReviews();
       } else {
         setState(() {
           _error = response.error ?? 'Failed to load tutor details';
@@ -54,6 +59,34 @@ class _TutorDetailScreenState extends State<TutorDetailScreen> {
       setState(() {
         _error = e.toString();
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadReviews() async {
+    setState(() {
+      _isLoadingReviews = true;
+    });
+
+    try {
+      final apiService = ApiService();
+      final response = await apiService.get('/reviews/tutor/${widget.tutorId}');
+      
+      if (response.success && response.data != null) {
+        final data = response.data as Map<String, dynamic>;
+        setState(() {
+          _reviews = data['reviews'] ?? [];
+          _isLoadingReviews = false;
+        });
+      } else {
+        setState(() {
+          _isLoadingReviews = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading reviews: $e');
+      setState(() {
+        _isLoadingReviews = false;
       });
     }
   }
@@ -186,6 +219,8 @@ class _TutorDetailScreenState extends State<TutorDetailScreen> {
               _buildEducationSection(),
               const Divider(height: 1),
               _buildStatsSection(),
+              const Divider(height: 1),
+              _buildReviewsSection(),
               const SizedBox(height: 100), // Space for bottom buttons
             ],
           ),
@@ -478,6 +513,316 @@ class _TutorDetailScreenState extends State<TutorDetailScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildReviewsSection() {
+    final totalReviews = _tutor!['totalReviews'] ?? 0;
+    final averageRating = _tutor!['rating'] ?? 0.0;
+    
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Reviews',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (totalReviews > 3)
+                TextButton(
+                  onPressed: () {
+                    context.push(
+                      '/tutor-reviews/${widget.tutorId}?tutorName=${Uri.encodeComponent(_tutor!['name'] ?? 'Tutor')}',
+                    );
+                  },
+                  child: const Text('See All'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Rating Summary
+          if (totalReviews > 0) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Row(
+                children: [
+                  Column(
+                    children: [
+                      Text(
+                        averageRating.toStringAsFixed(1),
+                        style: const TextStyle(
+                          fontSize: 48,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Row(
+                        children: List.generate(5, (index) {
+                          return Icon(
+                            index < averageRating.floor()
+                                ? Icons.star
+                                : (index < averageRating
+                                    ? Icons.star_half
+                                    : Icons.star_border),
+                            color: Colors.amber,
+                            size: 20,
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$totalReviews reviews',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 24),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildRatingBar(5, _calculateRatingPercentage(5)),
+                        _buildRatingBar(4, _calculateRatingPercentage(4)),
+                        _buildRatingBar(3, _calculateRatingPercentage(3)),
+                        _buildRatingBar(2, _calculateRatingPercentage(2)),
+                        _buildRatingBar(1, _calculateRatingPercentage(1)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          
+          // Recent Reviews
+          if (_isLoadingReviews)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_reviews.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    Icon(Icons.rate_review_outlined, size: 48, color: Colors.grey[400]),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No reviews yet',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Column(
+              children: _reviews.take(3).map((review) {
+                return _buildReviewCard(review);
+              }).toList(),
+            ),
+          
+          if (totalReviews > 3 && !_isLoadingReviews)
+            Center(
+              child: TextButton(
+                onPressed: () {
+                  context.push(
+                    '/tutor-reviews/${widget.tutorId}?tutorName=${Uri.encodeComponent(_tutor!['name'] ?? 'Tutor')}',
+                  );
+                },
+                child: Text('View all $totalReviews reviews'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRatingBar(int stars, double percentage) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Text('$stars', style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          const Icon(Icons.star, size: 12, color: Colors.amber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: LinearProgressIndicator(
+              value: percentage / 100,
+              backgroundColor: Colors.grey[300],
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${percentage.toStringAsFixed(0)}%',
+            style: const TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _calculateRatingPercentage(int stars) {
+    if (_reviews.isEmpty) return 0;
+    final count = _reviews.where((r) => r['rating'] == stars).length;
+    return (count / _reviews.length) * 100;
+  }
+
+  Widget _buildReviewCard(Map<String, dynamic> review) {
+    final studentName = review['studentId'] != null
+        ? '${review['studentId']['firstName'] ?? ''} ${review['studentId']['lastName'] ?? ''}'.trim()
+        : 'Anonymous';
+    final rating = review['rating'] ?? 0;
+    final reviewText = review['review'] ?? '';
+    final createdAt = review['createdAt'] != null
+        ? DateTime.parse(review['createdAt'])
+        : DateTime.now();
+    final timeAgo = _getTimeAgo(createdAt);
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                  child: Text(
+                    studentName.isNotEmpty ? studentName[0].toUpperCase() : 'A',
+                    style: TextStyle(
+                      color: Theme.of(context).primaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        studentName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Row(
+                            children: List.generate(5, (index) {
+                              return Icon(
+                                index < rating ? Icons.star : Icons.star_border,
+                                color: Colors.amber,
+                                size: 16,
+                              );
+                            }),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            timeAgo,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (reviewText.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                reviewText,
+                style: const TextStyle(fontSize: 14, height: 1.4),
+              ),
+            ],
+            if (review['tutorResponse'] != null && review['tutorResponse']['text'] != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.reply, size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Tutor Response',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      review['tutorResponse']['text'],
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inDays > 365) {
+      final years = (difference.inDays / 365).floor();
+      return '$years ${years == 1 ? 'year' : 'years'} ago';
+    } else if (difference.inDays > 30) {
+      final months = (difference.inDays / 30).floor();
+      return '$months ${months == 1 ? 'month' : 'months'} ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} ${difference.inDays == 1 ? 'day' : 'days'} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} ${difference.inHours == 1 ? 'hour' : 'hours'} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} ${difference.inMinutes == 1 ? 'minute' : 'minutes'} ago';
+    } else {
+      return 'Just now';
+    }
   }
 
   Widget _buildStatItem(IconData icon, String value, String label) {

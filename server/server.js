@@ -28,6 +28,7 @@ const profileRoutes = require('./routes/profiles');
 const callRoutes = require('./routes/calls');
 const notificationRoutes = require('./routes/notifications');
 const sessionRoutes = require('./routes/sessions');
+const offlineSessionRoutes = require('./routes/offlineSessions');
 
 // Import services
 const reminderScheduler = require('./services/reminderScheduler');
@@ -172,6 +173,8 @@ app.use('/api/profiles', profileRoutes);
 app.use('/api/calls', callRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/sessions', sessionRoutes);
+app.use('/api/offline-sessions', offlineSessionRoutes);
+app.use('/api/dashboard', require('./routes/dashboard')); // Dashboard data
 
 // Serve static files for uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

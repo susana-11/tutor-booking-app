@@ -604,4 +604,129 @@ exports.uploadAttachment = async (req, res) => {
   }
 };
 
+// Report user
+exports.reportUser = async (req, res) => {
+  try {
+    const reporterId = req.user.userId;
+    const { reportedUserId, reportedUserName, reason, details, conversationId } = req.body;
+
+    console.log(`🚨 User ${reporterId} reporting user ${reportedUserId} for: ${reason}`);
+
+    // Validate input
+    if (!reportedUserId || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reported user ID and reason are required'
+      });
+    }
+
+    // Get reporter info
+    const reporter = await User.findById(reporterId);
+    if (!reporter) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reporter not found'
+      });
+    }
+
+    // Create report notification for admin
+    const notificationService = require('../services/notificationService');
+    
+    // Find all admin users
+    const admins = await User.find({ role: 'admin' });
+    
+    // Send notification to all admins
+    for (const admin of admins) {
+      await notificationService.createNotification({
+        userId: admin._id,
+        type: 'user_report',
+        title: '🚨 User Report',
+        body: `${reporter.firstName} ${reporter.lastName} reported ${reportedUserName || 'a user'} for ${reason}`,
+        data: {
+          reporterId,
+          reporterName: `${reporter.firstName} ${reporter.lastName}`,
+          reportedUserId,
+          reportedUserName,
+          reason,
+          details,
+          conversationId,
+          timestamp: new Date()
+        },
+        priority: 'high'
+      });
+    }
+
+    console.log(`✅ Report sent to ${admins.length} admin(s)`);
+
+    res.json({
+      success: true,
+      message: 'Report submitted successfully. Our team will review it shortly.'
+    });
+
+  } catch (error) {
+    console.error('Report user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit report',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// Clear chat messages
+exports.clearChat = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { conversationId } = req.params;
+
+    console.log(`🗑️ User ${userId} clearing chat ${conversationId}`);
+
+    // Verify user is part of the conversation
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    const isParticipant = conversation.participants.some(
+      p => p.userId.toString() === userId
+    );
+
+    if (!isParticipant) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to clear this conversation'
+      });
+    }
+
+    // Delete all messages in the conversation for this user
+    // Note: This only marks messages as deleted for this user, not permanently deleted
+    await Message.updateMany(
+      { conversationId },
+      { $addToSet: { deletedFor: userId } }
+    );
+
+    // Update conversation last message
+    conversation.lastMessage = null;
+    await conversation.save();
+
+    console.log(`✅ Chat cleared for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Chat cleared successfully'
+    });
+
+  } catch (error) {
+    console.error('Clear chat error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear chat',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
 module.exports = exports;

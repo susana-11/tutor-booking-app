@@ -2,6 +2,7 @@ const Booking = require('../models/Booking');
 const AvailabilitySlot = require('../models/AvailabilitySlot');
 const User = require('../models/User');
 const notificationService = require('../services/notificationService');
+const escrowService = require('../services/escrowService');
 
 // Create a new booking request
 exports.createBookingRequest = async (req, res) => {
@@ -401,7 +402,10 @@ exports.cancelBooking = async (req, res) => {
 
     console.log('Cancel booking request:', { userId, bookingId, reason });
 
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findById(bookingId)
+      .populate('studentId', 'firstName lastName email')
+      .populate('tutorId', 'firstName lastName email');
+      
     if (!booking) {
       return res.status(404).json({
         success: false,
@@ -411,15 +415,17 @@ exports.cancelBooking = async (req, res) => {
 
     console.log('Booking found:', {
       bookingId: booking._id.toString(),
-      studentId: booking.studentId?.toString(),
-      tutorId: booking.tutorId?.toString(),
+      studentId: booking.studentId?._id?.toString(),
+      tutorId: booking.tutorId?._id?.toString(),
       userId: userId,
-      status: booking.status
+      status: booking.status,
+      escrowStatus: booking.escrow?.status,
+      paymentStatus: booking.payment?.status
     });
 
     // Check if user is authorized to cancel
-    const isStudent = booking.studentId?.toString() === userId.toString();
-    const isTutor = booking.tutorId?.toString() === userId.toString();
+    const isStudent = booking.studentId?._id?.toString() === userId.toString();
+    const isTutor = booking.tutorId?._id?.toString() === userId.toString();
 
     console.log('Authorization check:', { isStudent, isTutor });
 
@@ -445,37 +451,32 @@ exports.cancelBooking = async (req, res) => {
       });
     }
 
-    // Check cancellation policy (24 hours before session)
-    const sessionDateTime = new Date(booking.sessionDate);
-    const now = new Date();
-    const hoursUntilSession = (sessionDateTime - now) / (1000 * 60 * 60);
-
-    console.log('Cancellation policy check:', {
-      sessionDateTime,
-      now,
-      hoursUntilSession,
-      isStudent
-    });
-
-    // Allow cancellation if more than 1 hour before session (relaxed for testing)
-    // In production, change this back to 24 hours
-    if (hoursUntilSession < 1 && hoursUntilSession > 0 && isStudent) {
-      return res.status(400).json({
-        success: false,
-        message: 'Bookings can only be cancelled at least 1 hour before the session'
-      });
-    }
-
-    // Allow cancellation of past bookings for testing purposes
-    // In production, you might want to prevent this
+    // Calculate refund eligibility
+    const refundCalculation = escrowService.calculateRefundAmount(booking);
+    
+    console.log('Refund calculation:', refundCalculation);
 
     // Update booking
     booking.status = 'cancelled';
     booking.cancellationReason = reason;
     booking.cancelledBy = userId;
     booking.cancelledAt = new Date();
+    booking.refundAmount = refundCalculation.refundAmount;
+    booking.refundStatus = refundCalculation.eligible ? 'processing' : 'none';
 
     await booking.save();
+
+    // Process refund if payment was made and escrow is held
+    let refundResult = null;
+    if (booking.payment?.status === 'paid' && booking.escrow?.status === 'held') {
+      try {
+        refundResult = await escrowService.refundEscrow(bookingId, reason);
+        console.log('✅ Refund processed:', refundResult);
+      } catch (refundError) {
+        console.error('❌ Refund processing error:', refundError);
+        // Continue with cancellation even if refund fails
+      }
+    }
 
     // Update availability slot
     const availabilitySlot = await AvailabilitySlot.findById(booking.slotId);
@@ -495,14 +496,14 @@ exports.cancelBooking = async (req, res) => {
       });
 
       // Notify the other party (if student cancelled, notify tutor and vice versa)
-      const notifyUserId = isStudent ? booking.tutorId : booking.studentId;
+      const notifyUserId = isStudent ? booking.tutorId._id : booking.studentId._id;
       const cancelledByUser = await User.findById(userId).select('firstName lastName');
       const cancelledByName = cancelledByUser ? `${cancelledByUser.firstName} ${cancelledByUser.lastName}` : 'User';
 
       await notificationService.notifyBookingCancelled({
         userId: notifyUserId,
         cancelledBy: cancelledByName,
-        subject: booking.subject,
+        subject: booking.subject?.name || 'Session',
         date: formattedDate,
         reason,
         bookingId: booking._id
@@ -514,7 +515,20 @@ exports.cancelBooking = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Booking cancelled successfully'
+      message: 'Booking cancelled successfully',
+      data: {
+        bookingId: booking._id,
+        status: booking.status,
+        refund: refundResult ? {
+          amount: refundResult.refundAmount,
+          percentage: refundResult.refundPercentage,
+          reason: refundResult.refundReason
+        } : {
+          amount: refundCalculation.refundAmount,
+          percentage: refundCalculation.refundPercentage,
+          reason: refundCalculation.refundReason
+        }
+      }
     });
 
   } catch (error) {
@@ -830,7 +844,10 @@ exports.requestReschedule = async (req, res) => {
     const { bookingId } = req.params;
     const { newDate, newStartTime, newEndTime, reason } = req.body;
 
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findById(bookingId)
+      .populate('studentId', 'firstName lastName')
+      .populate('tutorId', 'firstName lastName');
+      
     if (!booking) {
       return res.status(404).json({
         success: false,
@@ -839,8 +856,8 @@ exports.requestReschedule = async (req, res) => {
     }
 
     // Check if user is authorized
-    const isStudent = booking.studentId.toString() === req.user.userId;
-    const isTutor = booking.tutorId.toString() === req.user.userId;
+    const isStudent = booking.studentId._id.toString() === req.user.userId;
+    const isTutor = booking.tutorId._id.toString() === req.user.userId;
 
     if (!isStudent && !isTutor) {
       return res.status(403).json({
@@ -857,8 +874,17 @@ exports.requestReschedule = async (req, res) => {
       });
     }
 
+    // Check if there's already a pending reschedule request
+    const hasPendingRequest = booking.rescheduleRequests.some(req => req.status === 'pending');
+    if (hasPendingRequest) {
+      return res.status(400).json({
+        success: false,
+        message: 'There is already a pending reschedule request for this booking'
+      });
+    }
+
     // Add reschedule request
-    booking.rescheduleRequests.push({
+    const rescheduleRequest = {
       requestedBy: req.user.userId,
       requestedAt: new Date(),
       newDate: new Date(newDate),
@@ -866,16 +892,53 @@ exports.requestReschedule = async (req, res) => {
       newEndTime,
       reason,
       status: 'pending',
-    });
-
+    };
+    
+    booking.rescheduleRequests.push(rescheduleRequest);
     await booking.save();
+
+    // Get the saved request with ID
+    const savedRequest = booking.rescheduleRequests[booking.rescheduleRequests.length - 1];
+
+    // Send notification to the other party
+    try {
+      const requestedByName = isStudent 
+        ? `${booking.studentId.firstName} ${booking.studentId.lastName}`
+        : `${booking.tutorId.firstName} ${booking.tutorId.lastName}`;
+      
+      const notifyUserId = isStudent ? booking.tutorId._id : booking.studentId._id;
+      
+      const formattedNewDate = new Date(newDate).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+
+      await notificationService.createNotification({
+        userId: notifyUserId,
+        type: 'reschedule_request',
+        title: 'Reschedule Request',
+        body: `${requestedByName} requested to reschedule your session to ${formattedNewDate} at ${newStartTime}`,
+        data: {
+          type: 'reschedule_request',
+          bookingId: booking._id.toString(),
+          requestId: savedRequest._id.toString(),
+          newDate: formattedNewDate,
+          newTime: `${newStartTime} - ${newEndTime}`
+        },
+        priority: 'high',
+        actionUrl: isStudent ? '/tutor/bookings' : '/student/bookings'
+      });
+    } catch (notifError) {
+      console.error('Failed to send reschedule notification:', notifError);
+    }
 
     res.json({
       success: true,
       message: 'Reschedule request submitted successfully',
       data: {
         bookingId: booking._id,
-        rescheduleRequest: booking.rescheduleRequests[booking.rescheduleRequests.length - 1]
+        rescheduleRequest: savedRequest
       }
     });
 
@@ -884,6 +947,211 @@ exports.requestReschedule = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to request reschedule',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// Respond to reschedule request
+exports.respondToRescheduleRequest = async (req, res) => {
+  try {
+    const { bookingId, requestId } = req.params;
+    const { response } = req.body; // 'accept' or 'reject'
+
+    if (!['accept', 'reject'].includes(response)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid response. Must be "accept" or "reject"'
+      });
+    }
+
+    const booking = await Booking.findById(bookingId)
+      .populate('studentId', 'firstName lastName')
+      .populate('tutorId', 'firstName lastName');
+      
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
+    }
+
+    // Find the reschedule request
+    const rescheduleRequest = booking.rescheduleRequests.id(requestId);
+    if (!rescheduleRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reschedule request not found'
+      });
+    }
+
+    // Check if request is still pending
+    if (rescheduleRequest.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Reschedule request already ${rescheduleRequest.status}`
+      });
+    }
+
+    // Check if user is authorized (must be the other party, not the requester)
+    const isStudent = booking.studentId._id.toString() === req.user.userId;
+    const isTutor = booking.tutorId._id.toString() === req.user.userId;
+    const isRequester = rescheduleRequest.requestedBy.toString() === req.user.userId;
+
+    if (!isStudent && !isTutor) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to respond to this reschedule request'
+      });
+    }
+
+    if (isRequester) {
+      return res.status(403).json({
+        success: false,
+        message: 'You cannot respond to your own reschedule request'
+      });
+    }
+
+    // Update reschedule request status
+    rescheduleRequest.status = response === 'accept' ? 'accepted' : 'rejected';
+    rescheduleRequest.respondedAt = new Date();
+
+    // If accepted, update the booking with new date/time
+    if (response === 'accept') {
+      booking.sessionDate = rescheduleRequest.newDate;
+      booking.startTime = rescheduleRequest.newStartTime;
+      booking.endTime = rescheduleRequest.newEndTime;
+      
+      // Mark as rescheduled
+      booking.isRescheduled = true;
+      
+      // Update availability slot if exists
+      if (booking.slotId) {
+        const AvailabilitySlot = require('../models/AvailabilitySlot');
+        const slot = await AvailabilitySlot.findById(booking.slotId);
+        if (slot && slot.booking) {
+          slot.booking.sessionDate = rescheduleRequest.newDate;
+          slot.booking.startTime = rescheduleRequest.newStartTime;
+          slot.booking.endTime = rescheduleRequest.newEndTime;
+          await slot.save();
+        }
+      }
+    }
+
+    await booking.save();
+
+    // Send notification to the requester
+    try {
+      const responderName = isStudent 
+        ? `${booking.studentId.firstName} ${booking.studentId.lastName}`
+        : `${booking.tutorId.firstName} ${booking.tutorId.lastName}`;
+      
+      const notifyUserId = rescheduleRequest.requestedBy;
+      
+      const formattedDate = new Date(rescheduleRequest.newDate).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+
+      if (response === 'accept') {
+        await notificationService.createNotification({
+          userId: notifyUserId,
+          type: 'reschedule_accepted',
+          title: 'Reschedule Request Accepted ✅',
+          body: `${responderName} accepted your reschedule request. New session: ${formattedDate} at ${rescheduleRequest.newStartTime}`,
+          data: {
+            type: 'reschedule_accepted',
+            bookingId: booking._id.toString(),
+            newDate: formattedDate,
+            newTime: `${rescheduleRequest.newStartTime} - ${rescheduleRequest.newEndTime}`
+          },
+          priority: 'high',
+          actionUrl: isStudent ? '/tutor/bookings' : '/student/bookings'
+        });
+      } else {
+        await notificationService.createNotification({
+          userId: notifyUserId,
+          type: 'reschedule_rejected',
+          title: 'Reschedule Request Declined',
+          body: `${responderName} declined your reschedule request`,
+          data: {
+            type: 'reschedule_rejected',
+            bookingId: booking._id.toString()
+          },
+          priority: 'normal',
+          actionUrl: isStudent ? '/tutor/bookings' : '/student/bookings'
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send reschedule response notification:', notifError);
+    }
+
+    res.json({
+      success: true,
+      message: `Reschedule request ${response}ed successfully`,
+      data: {
+        bookingId: booking._id,
+        rescheduleRequest: rescheduleRequest,
+        ...(response === 'accept' && {
+          newSessionDate: booking.sessionDate,
+          newStartTime: booking.startTime,
+          newEndTime: booking.endTime
+        })
+      }
+    });
+
+  } catch (error) {
+    console.error('Respond to reschedule request error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to respond to reschedule request',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// Get reschedule requests for a booking
+exports.getRescheduleRequests = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    const booking = await Booking.findById(bookingId)
+      .populate('rescheduleRequests.requestedBy', 'firstName lastName')
+      .populate('studentId', 'firstName lastName')
+      .populate('tutorId', 'firstName lastName');
+      
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
+    }
+
+    // Check if user is authorized
+    const isStudent = booking.studentId._id.toString() === req.user.userId;
+    const isTutor = booking.tutorId._id.toString() === req.user.userId;
+
+    if (!isStudent && !isTutor) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view reschedule requests for this booking'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        bookingId: booking._id,
+        rescheduleRequests: booking.rescheduleRequests
+      }
+    });
+
+  } catch (error) {
+    console.error('Get reschedule requests error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch reschedule requests',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }

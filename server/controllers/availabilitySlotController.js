@@ -400,6 +400,125 @@ exports.createBulkAvailability = async (req, res) => {
   }
 };
 
+// Toggle slot availability
+exports.toggleSlotAvailability = async (req, res) => {
+  try {
+    const tutorId = req.user.userId;
+    const { slotId } = req.params;
+    const { makeAvailable, cancelBooking } = req.body;
+
+    const slot = await AvailabilitySlot.findOne({
+      _id: slotId,
+      tutorId,
+      isActive: true
+    });
+
+    if (!slot) {
+      return res.status(404).json({
+        success: false,
+        message: 'Availability slot not found'
+      });
+    }
+
+    // Check if slot is booked
+    if (slot.isBooked) {
+      const bookingStatus = slot.booking.status;
+      
+      // If confirmed booking, cannot make unavailable
+      if (bookingStatus === 'confirmed' && !makeAvailable) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot make unavailable - confirmed booking exists',
+          code: 'CONFIRMED_BOOKING_EXISTS',
+          data: {
+            booking: {
+              studentName: slot.booking.studentName,
+              subject: slot.booking.subject,
+              status: bookingStatus,
+              bookedAt: slot.booking.bookedAt
+            }
+          }
+        });
+      }
+      
+      // If pending booking and user wants to cancel it
+      if (bookingStatus === 'pending' && !makeAvailable && cancelBooking) {
+        // Cancel the booking
+        const Booking = require('../models/Booking');
+        const booking = await Booking.findById(slot.booking.bookingId);
+        
+        if (booking) {
+          booking.status = 'cancelled';
+          booking.cancellationReason = 'Tutor made time slot unavailable';
+          booking.cancelledBy = tutorId;
+          booking.cancelledAt = new Date();
+          await booking.save();
+          
+          // Send notification to student
+          const notificationService = require('../services/notificationService');
+          await notificationService.createNotification({
+            userId: slot.booking.studentId,
+            type: 'booking_cancelled',
+            title: 'Booking Request Cancelled',
+            body: `The tutor has made the ${slot.timeSlot.displayTime} slot unavailable. Please choose another time.`,
+            data: {
+              type: 'booking_cancelled',
+              bookingId: booking._id.toString(),
+              reason: 'Tutor made time slot unavailable'
+            },
+            priority: 'high'
+          });
+        }
+        
+        // Clear booking from slot
+        slot.isBooked = false;
+        slot.booking = undefined;
+      } else if (bookingStatus === 'pending' && !makeAvailable && !cancelBooking) {
+        // User needs to confirm cancellation
+        return res.status(400).json({
+          success: false,
+          message: 'This slot has a pending booking request',
+          code: 'PENDING_BOOKING_EXISTS',
+          data: {
+            booking: {
+              studentName: slot.booking.studentName,
+              subject: slot.booking.subject,
+              status: bookingStatus,
+              bookedAt: slot.booking.bookedAt
+            },
+            requiresConfirmation: true
+          }
+        });
+      }
+    }
+
+    // Toggle availability
+    slot.isAvailable = makeAvailable !== undefined ? makeAvailable : !slot.isAvailable;
+    slot.lastModifiedBy = tutorId;
+    slot.updatedAt = new Date();
+    
+    await slot.save();
+
+    res.json({
+      success: true,
+      message: `Slot marked as ${slot.isAvailable ? 'available' : 'unavailable'}`,
+      data: {
+        id: slot._id,
+        isAvailable: slot.isAvailable,
+        isBooked: slot.isBooked
+      }
+    });
+
+  } catch (error) {
+    console.error('Toggle slot availability error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to toggle slot availability',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
 // Update availability slot
 exports.updateAvailabilitySlot = async (req, res) => {
   try {
@@ -420,11 +539,66 @@ exports.updateAvailabilitySlot = async (req, res) => {
       });
     }
 
-    // Check if slot can be modified
+    // Check if slot is booked
+    if (slot.isBooked) {
+      const bookingStatus = slot.booking.status;
+      
+      // If confirmed booking, check time restrictions
+      if (bookingStatus === 'confirmed') {
+        const now = new Date();
+        const slotDate = new Date(slot.date);
+        const [hours, minutes] = slot.timeSlot.startTime.split(':');
+        slotDate.setHours(parseInt(hours), parseInt(minutes));
+        
+        const hoursUntilSession = (slotDate - now) / (1000 * 60 * 60);
+        
+        // Cannot edit if less than 48 hours before session
+        if (hoursUntilSession < 48) {
+          return res.status(400).json({
+            success: false,
+            message: 'Cannot edit time slot - confirmed booking exists and session is less than 48 hours away',
+            code: 'CONFIRMED_BOOKING_TOO_CLOSE',
+            data: {
+              booking: {
+                studentName: slot.booking.studentName,
+                subject: slot.booking.subject,
+                status: bookingStatus
+              },
+              hoursUntilSession: Math.round(hoursUntilSession),
+              suggestion: 'Use the reschedule request system instead'
+            }
+          });
+        }
+        
+        // If more than 48 hours, suggest reschedule system
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot directly edit - confirmed booking exists',
+          code: 'CONFIRMED_BOOKING_EXISTS',
+          data: {
+            booking: {
+              studentName: slot.booking.studentName,
+              subject: slot.booking.subject,
+              status: bookingStatus
+            },
+            suggestion: 'Use the reschedule request system to propose a new time'
+          }
+        });
+      }
+      
+      // If pending booking, warn but allow
+      if (bookingStatus === 'pending') {
+        // Will update and notify student
+        updates._notifyStudent = true;
+        updates._studentId = slot.booking.studentId;
+      }
+    }
+
+    // Check if slot can be modified (past date check)
     if (!slot.canBeModified()) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot modify this slot (it may be booked or in the past)'
+        message: 'Cannot modify this slot - it is in the past'
       });
     }
 
@@ -472,6 +646,23 @@ exports.updateAvailabilitySlot = async (req, res) => {
       { new: true, runValidators: true }
     );
 
+    // Notify student if there was a pending booking
+    if (updates._notifyStudent && updates._studentId) {
+      const notificationService = require('../services/notificationService');
+      await notificationService.createNotification({
+        userId: updates._studentId,
+        type: 'slot_time_changed',
+        title: 'Time Slot Updated',
+        body: `The tutor updated the time slot. New time: ${updatedSlot.timeSlot.displayTime}`,
+        data: {
+          type: 'slot_time_changed',
+          slotId: updatedSlot._id.toString(),
+          newTime: updatedSlot.timeSlot.displayTime
+        },
+        priority: 'high'
+      });
+    }
+
     res.json({
       success: true,
       message: 'Availability slot updated successfully',
@@ -503,6 +694,7 @@ exports.deleteAvailabilitySlot = async (req, res) => {
   try {
     const tutorId = req.user.userId;
     const { slotId } = req.params;
+    const { cancelBooking } = req.body;
 
     const slot = await AvailabilitySlot.findOne({
       _id: slotId,
@@ -517,12 +709,72 @@ exports.deleteAvailabilitySlot = async (req, res) => {
       });
     }
 
-    // Check if slot can be deleted
-    if (slot.isBooked && slot.booking.status === 'confirmed') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot delete a confirmed booking'
-      });
+    // Check if slot is booked
+    if (slot.isBooked) {
+      const bookingStatus = slot.booking.status;
+      
+      // Cannot delete confirmed booking
+      if (bookingStatus === 'confirmed') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete slot - confirmed booking exists',
+          code: 'CONFIRMED_BOOKING_EXISTS',
+          data: {
+            booking: {
+              studentName: slot.booking.studentName,
+              subject: slot.booking.subject,
+              status: bookingStatus,
+              bookedAt: slot.booking.bookedAt
+            },
+            suggestion: 'Cancel the booking first using the proper cancellation process'
+          }
+        });
+      }
+      
+      // If pending booking and user wants to cancel it
+      if (bookingStatus === 'pending' && cancelBooking) {
+        // Decline the booking
+        const Booking = require('../models/Booking');
+        const booking = await Booking.findById(slot.booking.bookingId);
+        
+        if (booking) {
+          booking.status = 'declined';
+          booking.rejectionReason = 'Tutor deleted the time slot';
+          booking.rejectedAt = new Date();
+          await booking.save();
+          
+          // Send notification to student
+          const notificationService = require('../services/notificationService');
+          await notificationService.createNotification({
+            userId: slot.booking.studentId,
+            type: 'booking_declined',
+            title: 'Booking Request Declined',
+            body: `The tutor removed the ${slot.timeSlot.displayTime} slot. Please book another available time.`,
+            data: {
+              type: 'booking_declined',
+              bookingId: booking._id.toString(),
+              reason: 'Tutor deleted the time slot'
+            },
+            priority: 'high'
+          });
+        }
+      } else if (bookingStatus === 'pending' && !cancelBooking) {
+        // User needs to confirm cancellation
+        return res.status(400).json({
+          success: false,
+          message: 'This slot has a pending booking request',
+          code: 'PENDING_BOOKING_EXISTS',
+          data: {
+            booking: {
+              studentName: slot.booking.studentName,
+              subject: slot.booking.subject,
+              status: bookingStatus,
+              bookedAt: slot.booking.bookedAt
+            },
+            requiresConfirmation: true
+          }
+        });
+      }
     }
 
     // Soft delete

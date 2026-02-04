@@ -19,6 +19,8 @@ class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
   void initState() {
     super.initState();
     _loadNotifications();
+    // Refresh unread count
+    _notificationService.refreshUnreadCount();
   }
 
   Future<void> _loadNotifications() async {

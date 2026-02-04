@@ -45,6 +45,8 @@ router.post('/conversations/:conversationId/messages', authenticate, chatControl
 router.get('/unread-count', authenticate, chatController.getUnreadCount);
 router.get('/search', authenticate, chatController.searchMessages);
 router.post('/upload', authenticate, upload.single('file'), chatController.uploadAttachment);
+router.post('/report', authenticate, chatController.reportUser);
+router.delete('/conversations/:conversationId/messages', authenticate, chatController.clearChat);
 
 // Legacy routes (keeping for backward compatibility)
 // Get messages for a conversation

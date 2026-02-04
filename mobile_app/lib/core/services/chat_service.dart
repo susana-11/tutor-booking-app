@@ -586,6 +586,63 @@ class ChatService {
     _onlineUsers.clear();
     _typingUsers.clear();
   }
+  
+  // Report user
+  Future<ApiResponse<void>> reportUser({
+    required String reportedUserId,
+    required String reportedUserName,
+    required String reason,
+    String? details,
+    String? conversationId,
+  }) async {
+    try {
+      final response = await _apiService.post('/chat/report', data: {
+        'reportedUserId': reportedUserId,
+        'reportedUserName': reportedUserName,
+        'reason': reason,
+        'details': details,
+        'conversationId': conversationId,
+      });
+
+      if (response.success) {
+        return ApiResponse.success(null);
+      }
+      
+      return ApiResponse.error(response.error ?? 'Failed to submit report');
+    } catch (e) {
+      return ApiResponse.error('Failed to submit report: $e');
+    }
+  }
+  
+  // Clear chat
+  Future<ApiResponse<void>> clearChat({
+    required String conversationId,
+  }) async {
+    try {
+      final response = await _apiService.delete('/chat/conversations/$conversationId/messages');
+
+      if (response.success) {
+        // Clear local messages cache
+        _messagesCache.remove(conversationId);
+        
+        // Update conversation last message
+        final conversationIndex = _conversations.indexWhere((c) => c.id == conversationId);
+        if (conversationIndex != -1) {
+          _conversations[conversationIndex] = _conversations[conversationIndex].copyWith(
+            lastMessage: null,
+            unreadCount: 0,
+          );
+          _conversationsController.add(_conversations);
+        }
+        
+        return ApiResponse.success(null);
+      }
+      
+      return ApiResponse.error(response.error ?? 'Failed to clear chat');
+    } catch (e) {
+      return ApiResponse.error('Failed to clear chat: $e');
+    }
+  }
 
   // Dispose
   void dispose() {

@@ -1,4 +1,5 @@
 const chapaService = require('./chapaService');
+const escrowService = require('./escrowService');
 const Booking = require('../models/Booking');
 const Transaction = require('../models/Transaction');
 const TutorProfile = require('../models/TutorProfile');
@@ -156,16 +157,21 @@ class PaymentService {
         booking.status = 'confirmed';
         
         // Hold payment in escrow (NOT in tutor's available balance yet!)
+        const releaseDelayHours = escrowService.config.releaseDelayHours;
         booking.escrow = {
           status: 'held',
           amount: fees.tutorShare,
           heldAt: new Date(),
           releaseScheduledFor: null, // Will be set after session completion
           autoReleaseEnabled: true,
-          releaseDelayHours: 24
+          releaseDelayHours: releaseDelayHours
         };
         
         await booking.save();
+        
+        console.log(`🔒 Payment held in escrow for booking ${booking._id}`);
+        console.log(`   Amount: ETB ${fees.tutorShare}`);
+        console.log(`   Will be released ${releaseDelayHours} hours after session completion`);
 
         // Update transaction
         transaction.status = 'completed';
@@ -193,7 +199,8 @@ class PaymentService {
             tutorShare: fees.tutorShare,
             platformFee: fees.platformFee,
             status: 'paid',
-            escrowStatus: 'held'
+            escrowStatus: 'held',
+            releaseDelayHours: releaseDelayHours
           }
         };
       } else {

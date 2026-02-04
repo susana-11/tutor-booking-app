@@ -26,6 +26,29 @@ exports.getNotifications = async (req, res) => {
   }
 };
 
+// Get unread count
+exports.getUnreadCount = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const count = await notificationService.getUnreadCount(userId);
+
+    res.json({
+      success: true,
+      data: {
+        count
+      }
+    });
+  } catch (error) {
+    console.error('Get unread count error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch unread count',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
 // Mark notification as read
 exports.markAsRead = async (req, res) => {
   try {

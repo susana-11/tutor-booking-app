@@ -9,12 +9,12 @@ import '../../../core/widgets/reviews/rating_stars.dart';
 
 class CreateReviewScreen extends StatefulWidget {
   final String bookingId;
-  final Map<String, dynamic> bookingDetails;
+  final Map<String, dynamic>? bookingDetails;
 
   const CreateReviewScreen({
     Key? key,
     required this.bookingId,
-    required this.bookingDetails,
+    this.bookingDetails,
   }) : super(key: key);
 
   @override
@@ -105,8 +105,8 @@ class _CreateReviewScreenState extends State<CreateReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final tutorName = widget.bookingDetails['tutorName'] ?? 'Tutor';
-    final subject = widget.bookingDetails['subject'] ?? 'Session';
+    final tutorName = widget.bookingDetails?['tutorName'] ?? 'Tutor';
+    final subject = widget.bookingDetails?['subject'] ?? 'Session';
 
     return Scaffold(
       appBar: AppBar(

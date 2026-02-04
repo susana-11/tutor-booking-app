@@ -22,6 +22,11 @@ router.put('/:bookingId/respond', authenticate, bookingController.respondToBooki
 // Rating endpoint
 router.post('/:bookingId/rate', authenticate, bookingController.rateBooking);
 
+// Reschedule endpoints
+router.post('/:bookingId/reschedule/request', authenticate, bookingController.requestReschedule);
+router.post('/:bookingId/reschedule/:requestId/respond', authenticate, bookingController.respondToRescheduleRequest);
+router.get('/:bookingId/reschedule/requests', authenticate, bookingController.getRescheduleRequests);
+
 // Legacy routes (keeping for backward compatibility)
 // Get user's bookings
 router.get('/', authenticate, async (req, res) => {

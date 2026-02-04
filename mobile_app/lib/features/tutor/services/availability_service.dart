@@ -121,9 +121,12 @@ class AvailabilityService {
   }
 
   // Delete an availability slot
-  Future<ApiResponse<bool>> deleteAvailabilitySlot(String slotId) async {
+  Future<ApiResponse<bool>> deleteAvailabilitySlot(String slotId, {bool cancelBooking = false}) async {
     try {
-      final response = await _apiService.delete('/availability/slots/$slotId');
+      final response = await _apiService.delete(
+        '/availability/slots/$slotId',
+        data: {'cancelBooking': cancelBooking},
+      );
 
       if (response.success) {
         return ApiResponse.success(true);
@@ -132,6 +135,31 @@ class AvailabilityService {
       return ApiResponse.error(response.error ?? 'Failed to delete availability slot');
     } catch (e) {
       return ApiResponse.error('Failed to delete availability slot: $e');
+    }
+  }
+
+  // Toggle slot availability
+  Future<ApiResponse<Map<String, dynamic>>> toggleSlotAvailability({
+    required String slotId,
+    required bool makeAvailable,
+    bool cancelBooking = false,
+  }) async {
+    try {
+      final response = await _apiService.put(
+        '/availability/slots/$slotId/toggle-availability',
+        data: {
+          'makeAvailable': makeAvailable,
+          'cancelBooking': cancelBooking,
+        },
+      );
+
+      if (response.success && response.data != null) {
+        return ApiResponse.success(response.data);
+      }
+
+      return ApiResponse.error(response.error ?? 'Failed to toggle availability');
+    } catch (e) {
+      return ApiResponse.error('Failed to toggle availability: $e');
     }
   }
 

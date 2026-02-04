@@ -120,7 +120,7 @@ class BookingService {
     String? reason,
   }) async {
     try {
-      final response = await _apiService.put('/bookings/$bookingId/reschedule', data: {
+      final response = await _apiService.post('/bookings/$bookingId/reschedule/request', data: {
         'newDate': newDate.toIso8601String(),
         'newStartTime': newStartTime,
         'newEndTime': newEndTime,
@@ -131,9 +131,49 @@ class BookingService {
         return ApiResponse.success(response.data);
       }
       
-      return ApiResponse.error(response.error ?? 'Failed to reschedule booking');
+      return ApiResponse.error(response.error ?? 'Failed to request reschedule');
     } catch (e) {
-      return ApiResponse.error('Failed to reschedule booking: $e');
+      return ApiResponse.error('Failed to request reschedule: $e');
+    }
+  }
+
+  // Respond to reschedule request
+  Future<ApiResponse<Map<String, dynamic>>> respondToRescheduleRequest({
+    required String bookingId,
+    required String requestId,
+    required String response, // 'accept' or 'reject'
+  }) async {
+    try {
+      final apiResponse = await _apiService.post(
+        '/bookings/$bookingId/reschedule/$requestId/respond',
+        data: {'response': response},
+      );
+
+      if (apiResponse.success && apiResponse.data != null) {
+        return ApiResponse.success(apiResponse.data);
+      }
+      
+      return ApiResponse.error(apiResponse.error ?? 'Failed to respond to reschedule request');
+    } catch (e) {
+      return ApiResponse.error('Failed to respond to reschedule request: $e');
+    }
+  }
+
+  // Get reschedule requests for a booking
+  Future<ApiResponse<List<Map<String, dynamic>>>> getRescheduleRequests(String bookingId) async {
+    try {
+      final response = await _apiService.get('/bookings/$bookingId/reschedule/requests');
+
+      if (response.success && response.data != null) {
+        final requests = List<Map<String, dynamic>>.from(
+          response.data['rescheduleRequests'] ?? []
+        );
+        return ApiResponse.success(requests);
+      }
+      
+      return ApiResponse.error(response.error ?? 'Failed to fetch reschedule requests');
+    } catch (e) {
+      return ApiResponse.error('Failed to fetch reschedule requests: $e');
     }
   }
 

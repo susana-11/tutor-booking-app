@@ -429,16 +429,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               ),
             ),
             const PopupMenuItem(
-              value: 'book_session',
-              child: Row(
-                children: [
-                  Icon(Icons.calendar_today, size: 20),
-                  SizedBox(width: 12),
-                  Text('Book Session'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
               value: 'search',
               child: Row(
                 children: [
@@ -1364,24 +1354,344 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void _handleMenuAction(String action) {
     switch (action) {
       case 'view_profile':
-        // TODO: Navigate to profile
-        _showError('Profile view coming soon!');
-        break;
-      case 'book_session':
-        // TODO: Navigate to booking
-        _showError('Session booking coming soon!');
+        _viewProfile();
         break;
       case 'search':
-        // TODO: Implement search
-        _showError('Message search coming soon!');
+        _searchMessages();
         break;
       case 'clear_chat':
         _showClearChatDialog();
         break;
       case 'report':
-        // TODO: Implement report
-        _showError('Report feature coming soon!');
+        _showReportDialog();
         break;
+    }
+  }
+  
+  void _viewProfile() {
+    // Navigate to profile based on user role
+    final authProvider = context.read<AuthProvider>();
+    final currentUserRole = authProvider.user?.role;
+    
+    if (currentUserRole == 'student') {
+      // Student viewing tutor profile
+      Navigator.pushNamed(
+        context,
+        '/student/tutor/${widget.participantId}',
+      );
+    } else if (currentUserRole == 'tutor') {
+      // Tutor viewing student profile (show basic info dialog)
+      _showStudentInfoDialog();
+    }
+  }
+  
+  void _showStudentInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+              backgroundImage: widget.participantAvatar != null
+                  ? NetworkImage(widget.participantAvatar!)
+                  : null,
+              child: widget.participantAvatar == null
+                  ? Text(
+                      widget.participantName.isNotEmpty
+                          ? widget.participantName[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                        color: AppTheme.primaryColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.participantName,
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                  if (widget.subject != null)
+                    Text(
+                      widget.subject!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.normal,
+                        color: Colors.grey,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              leading: Icon(Icons.person, color: AppTheme.primaryColor),
+              title: const Text('Student'),
+              subtitle: Text(widget.participantName),
+              contentPadding: EdgeInsets.zero,
+            ),
+            ListTile(
+              leading: Icon(
+                _isOnline ? Icons.circle : Icons.circle_outlined,
+                color: _isOnline ? Colors.green : Colors.grey,
+                size: 16,
+              ),
+              title: Text(_isOnline ? 'Online' : 'Offline'),
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (widget.subject != null)
+              ListTile(
+                leading: Icon(Icons.book, color: AppTheme.primaryColor),
+                title: const Text('Subject'),
+                subtitle: Text(widget.subject!),
+                contentPadding: EdgeInsets.zero,
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _searchMessages() {
+    showSearch(
+      context: context,
+      delegate: MessageSearchDelegate(
+        messages: _messages,
+        onMessageSelected: (message) {
+          // Scroll to the selected message
+          final index = _messages.indexOf(message);
+          if (index != -1 && _scrollController.hasClients) {
+            // Calculate approximate position
+            final position = index * 100.0; // Approximate height per message
+            _scrollController.animateTo(
+              position,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+            );
+          }
+        },
+      ),
+    );
+  }
+  
+  void _showReportDialog() {
+    final reasonController = TextEditingController();
+    String selectedReason = 'spam';
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.report, color: Colors.red),
+              const SizedBox(width: 12),
+              const Text('Report User'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Report ${widget.participantName}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Reason for reporting:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                RadioListTile<String>(
+                  title: const Text('Spam or Scam'),
+                  value: 'spam',
+                  groupValue: selectedReason,
+                  onChanged: (value) => setState(() => selectedReason = value!),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+                RadioListTile<String>(
+                  title: const Text('Inappropriate Content'),
+                  value: 'inappropriate',
+                  groupValue: selectedReason,
+                  onChanged: (value) => setState(() => selectedReason = value!),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+                RadioListTile<String>(
+                  title: const Text('Harassment or Bullying'),
+                  value: 'harassment',
+                  groupValue: selectedReason,
+                  onChanged: (value) => setState(() => selectedReason = value!),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+                RadioListTile<String>(
+                  title: const Text('Fake Profile'),
+                  value: 'fake',
+                  groupValue: selectedReason,
+                  onChanged: (value) => setState(() => selectedReason = value!),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+                RadioListTile<String>(
+                  title: const Text('Other'),
+                  value: 'other',
+                  groupValue: selectedReason,
+                  onChanged: (value) => setState(() => selectedReason = value!),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: reasonController,
+                  decoration: const InputDecoration(
+                    labelText: 'Additional Details (Optional)',
+                    hintText: 'Provide more information...',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                  maxLength: 500,
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'This report will be sent to our admin team for review.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange[900],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                reasonController.dispose();
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final details = reasonController.text.trim();
+                reasonController.dispose();
+                Navigator.pop(context);
+                await _submitReport(selectedReason, details);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Submit Report'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Future<void> _submitReport(String reason, String details) async {
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+      
+      // Submit report to admin
+      final response = await _chatService.reportUser(
+        reportedUserId: widget.participantId,
+        reportedUserName: widget.participantName,
+        reason: reason,
+        details: details,
+        conversationId: widget.conversationId,
+      );
+      
+      // Hide loading
+      if (mounted) Navigator.pop(context);
+      
+      if (response.success) {
+        // Show success message
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green),
+                  const SizedBox(width: 12),
+                  const Text('Report Submitted'),
+                ],
+              ),
+              content: const Text(
+                'Thank you for your report. Our admin team will review it and take appropriate action.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        _showError(response.error ?? 'Failed to submit report');
+      }
+    } catch (e) {
+      // Hide loading
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      print('❌ Error submitting report: $e');
+      _showError('Failed to submit report. Please try again.');
     }
   }
 
@@ -1577,17 +1887,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear Chat'),
-        content: const Text('Are you sure you want to clear all messages? This action cannot be undone.'),
+        content: const Text(
+          'Are you sure you want to clear all messages in this conversation? This will only clear messages on your device. This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              // TODO: Implement clear chat
-              _showError('Clear chat feature coming soon!');
+              await _clearChat();
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Clear'),
@@ -1595,6 +1906,51 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ],
       ),
     );
+  }
+  
+  Future<void> _clearChat() async {
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+      
+      // Clear chat messages
+      final response = await _chatService.clearChat(
+        conversationId: widget.conversationId,
+      );
+      
+      // Hide loading
+      if (mounted) Navigator.pop(context);
+      
+      if (response.success) {
+        // Clear local messages
+        setState(() {
+          _messages.clear();
+        });
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chat cleared successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showError(response.error ?? 'Failed to clear chat');
+      }
+    } catch (e) {
+      // Hide loading
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      print('❌ Error clearing chat: $e');
+      _showError('Failed to clear chat. Please try again.');
+    }
   }
 
   @override
@@ -1608,5 +1964,207 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _onlineStatusSubscription?.cancel();
     _fabAnimationController.dispose();
     super.dispose();
+  }
+}
+
+// Message Search Delegate
+class MessageSearchDelegate extends SearchDelegate<Message?> {
+  final List<Message> messages;
+  final Function(Message) onMessageSelected;
+  
+  MessageSearchDelegate({
+    required this.messages,
+    required this.onMessageSelected,
+  });
+  
+  @override
+  String get searchFieldLabel => 'Search messages...';
+  
+  @override
+  List<Widget> buildActions(BuildContext context) {
+    return [
+      if (query.isNotEmpty)
+        IconButton(
+          onPressed: () => query = '',
+          icon: const Icon(Icons.clear),
+        ),
+    ];
+  }
+  
+  @override
+  Widget buildLeading(BuildContext context) {
+    return IconButton(
+      onPressed: () => close(context, null),
+      icon: const Icon(Icons.arrow_back),
+    );
+  }
+  
+  @override
+  Widget buildResults(BuildContext context) {
+    return _buildSearchResults();
+  }
+  
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    return _buildSearchResults();
+  }
+  
+  Widget _buildSearchResults() {
+    if (query.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Search for messages',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // Filter messages by query
+    final results = messages.where((message) {
+      return message.content.toLowerCase().contains(query.toLowerCase()) ||
+             message.senderName.toLowerCase().contains(query.toLowerCase());
+    }).toList();
+    
+    if (results.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search_off,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No messages found',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try a different search term',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return ListView.builder(
+      itemCount: results.length,
+      itemBuilder: (context, index) {
+        final message = results[index];
+        final highlightedContent = _highlightQuery(message.content, query);
+        
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+            child: Text(
+              message.senderName.isNotEmpty
+                  ? message.senderName[0].toUpperCase()
+                  : '?',
+              style: TextStyle(
+                color: AppTheme.primaryColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          title: Text(
+            message.senderName,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: RichText(
+            text: highlightedContent,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Text(
+            _formatTime(message.createdAt),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+          onTap: () {
+            close(context, message);
+            onMessageSelected(message);
+          },
+        );
+      },
+    );
+  }
+  
+  TextSpan _highlightQuery(String text, String query) {
+    if (query.isEmpty) {
+      return TextSpan(text: text);
+    }
+    
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    final spans = <TextSpan>[];
+    
+    int start = 0;
+    int index = lowerText.indexOf(lowerQuery);
+    
+    while (index != -1) {
+      // Add text before match
+      if (index > start) {
+        spans.add(TextSpan(text: text.substring(start, index)));
+      }
+      
+      // Add highlighted match
+      spans.add(TextSpan(
+        text: text.substring(index, index + query.length),
+        style: TextStyle(
+          backgroundColor: Colors.yellow.withOpacity(0.5),
+          fontWeight: FontWeight.bold,
+        ),
+      ));
+      
+      start = index + query.length;
+      index = lowerText.indexOf(lowerQuery, start);
+    }
+    
+    // Add remaining text
+    if (start < text.length) {
+      spans.add(TextSpan(text: text.substring(start)));
+    }
+    
+    return TextSpan(children: spans);
+  }
+  
+  String _formatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
   }
 }

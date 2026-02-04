@@ -37,29 +37,53 @@ exports.getMyProfile = async (req, res) => {
       });
     }
 
-    // Format the response to match mobile app expectations
+    // Calculate rating and review stats
+    const Review = require('../models/Review');
+    const reviews = await Review.find({ tutorId: profile._id });
+    const totalReviews = reviews.length;
+    const averageRating = totalReviews > 0
+      ? reviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews
+      : 0;
+
+    // Format the response to match mobile app expectations with complete data
     const formattedProfile = {
+      _id: profile._id,
       id: profile._id,
       userId: profile.userId._id,
+      name: `${profile.userId.firstName} ${profile.userId.lastName}`,
       firstName: profile.userId.firstName,
       lastName: profile.userId.lastName,
       email: profile.userId.email,
       phone: profile.userId.phone,
-      profilePicture: profile.userId.profilePicture,
+      profilePicture: profile.userId.profilePicture || profile.profilePhoto,
+      profilePhoto: profile.profilePhoto,
       bio: profile.bio,
-      subjects: profile.subjects.map(s => s.name),
-      grades: [...new Set(profile.subjects.flatMap(s => s.gradelevels || []))], // Get unique grades from all subjects
+      headline: profile.headline,
+      subjects: profile.subjects,
+      grades: [...new Set(profile.subjects.flatMap(s => s.gradelevels || []))],
       hourlyRate: profile.pricing?.hourlyRate || 0,
-      experience: profile.experience?.description || (profile.experience?.years ? `${profile.experience.years} years` : ''),
-      education: profile.education.length > 0 ? profile.education[0].degree : '',
+      pricing: profile.pricing,
+      experience: profile.experience,
+      education: profile.education,
+      certifications: profile.certifications,
+      languages: profile.languages,
+      teachingMode: profile.teachingMode,
       isAvailableOnline: profile.teachingMode?.online || false,
       isAvailableInPerson: profile.teachingMode?.inPerson || false,
+      location: profile.location,
+      timezone: profile.timezone,
+      introVideo: profile.introVideo,
+      gallery: profile.gallery,
       status: profile.status,
       isActive: profile.isActive,
       isAvailable: profile.isAvailable !== undefined ? profile.isAvailable : true,
-      rating: profile.stats?.averageRating || 0,
-      totalReviews: profile.stats?.totalReviews || 0,
+      isVerified: profile.isVerified,
+      verificationStatus: profile.verificationStatus,
+      rating: averageRating,
+      totalReviews: totalReviews,
       totalSessions: profile.stats?.totalSessions || 0,
+      completedSessions: profile.stats?.completedSessions || 0,
+      totalEarnings: profile.stats?.totalEarnings || 0,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt
     };

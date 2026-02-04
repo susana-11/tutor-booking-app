@@ -7,6 +7,8 @@ import '../../../core/services/booking_service.dart';
 import '../../../core/services/payment_service.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/widgets/session_action_button.dart';
+import '../../../core/widgets/reschedule_request_dialog.dart';
+import '../../../core/widgets/reschedule_requests_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class StudentBookingsScreen extends StatefulWidget {
@@ -40,34 +42,103 @@ class _StudentBookingsScreenState extends State<StudentBookingsScreen>
     
     try {
       final user = context.read<AuthProvider>().user;
-      if (user == null) return;
+      if (user == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
 
       final response = await _bookingService.getBookings();
       
       if (response.success && response.data != null) {
         final allBookings = response.data as List<Map<String, dynamic>>;
         
+        // Filter bookings by status
+        // Upcoming: pending or confirmed bookings with future dates
+        final now = DateTime.now();
+        final upcomingList = <Map<String, dynamic>>[];
+        final completedList = <Map<String, dynamic>>[];
+        final cancelledList = <Map<String, dynamic>>[];
+        
+        for (var booking in allBookings) {
+          final status = booking['status'] as String?;
+          final sessionDateStr = booking['sessionDate'] as String?;
+          
+          if (status == null) continue;
+          
+          // Parse session date
+          DateTime? sessionDate;
+          if (sessionDateStr != null) {
+            try {
+              sessionDate = DateTime.parse(sessionDateStr);
+            } catch (e) {
+              print('Error parsing date: $sessionDateStr');
+            }
+          }
+          
+          // Categorize bookings
+          if (status == 'completed') {
+            completedList.add(booking);
+          } else if (status == 'cancelled' || status == 'declined') {
+            cancelledList.add(booking);
+          } else if (status == 'pending' || status == 'confirmed') {
+            // Only show as upcoming if date is in the future or today
+            if (sessionDate != null) {
+              final sessionDay = DateTime(sessionDate.year, sessionDate.month, sessionDate.day);
+              final today = DateTime(now.year, now.month, now.day);
+              if (sessionDay.isAfter(today) || sessionDay.isAtSameMomentAs(today)) {
+                upcomingList.add(booking);
+              } else {
+                // Past date but not completed - move to cancelled
+                cancelledList.add(booking);
+              }
+            } else {
+              // No date, show in upcoming
+              upcomingList.add(booking);
+            }
+          }
+        }
+        
+        // Sort by date (most recent first for upcoming, most recent last for completed)
+        upcomingList.sort((a, b) {
+          final dateA = DateTime.tryParse(a['sessionDate'] ?? '') ?? DateTime.now();
+          final dateB = DateTime.tryParse(b['sessionDate'] ?? '') ?? DateTime.now();
+          return dateA.compareTo(dateB); // Earliest first
+        });
+        
+        completedList.sort((a, b) {
+          final dateA = DateTime.tryParse(a['sessionDate'] ?? '') ?? DateTime.now();
+          final dateB = DateTime.tryParse(b['sessionDate'] ?? '') ?? DateTime.now();
+          return dateB.compareTo(dateA); // Most recent first
+        });
+        
+        cancelledList.sort((a, b) {
+          final dateA = DateTime.tryParse(a['sessionDate'] ?? '') ?? DateTime.now();
+          final dateB = DateTime.tryParse(b['sessionDate'] ?? '') ?? DateTime.now();
+          return dateB.compareTo(dateA); // Most recent first
+        });
+        
         setState(() {
-          _upcomingBookings = allBookings.where((b) => 
-            b['status'] == 'pending' || b['status'] == 'confirmed'
-          ).toList();
-          
-          _completedBookings = allBookings.where((b) => 
-            b['status'] == 'completed'
-          ).toList();
-          
-          _cancelledBookings = allBookings.where((b) => 
-            b['status'] == 'cancelled'
-          ).toList();
-          
+          _upcomingBookings = upcomingList;
+          _completedBookings = completedList;
+          _cancelledBookings = cancelledList;
           _isLoading = false;
         });
       } else {
         setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response.error ?? 'Failed to load bookings')),
+          );
+        }
       }
     } catch (e) {
       print('Error loading bookings: $e');
       setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading bookings: $e')),
+        );
+      }
     }
   }
 
@@ -667,27 +738,26 @@ class _StudentBookingsScreenState extends State<StudentBookingsScreen>
     }
   }
 
-  void _joinSession(Map<String, dynamic> booking) {
-    final tutorName = booking['tutorName'] ?? 'tutor';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Joining session with $tutorName'),
-        action: SnackBarAction(
-          label: 'Open Link',
-          onPressed: () {
-            // TODO: Launch meeting link
-          },
-        ),
+  Future<void> _rescheduleSession(Map<String, dynamic> booking) async {
+    // Show reschedule request dialog
+    showDialog(
+      context: context,
+      builder: (context) => RescheduleRequestDialog(
+        booking: booking,
+        onSuccess: _loadBookings,
       ),
     );
   }
 
-  Future<void> _rescheduleSession(Map<String, dynamic> booking) async {
-    final tutorName = booking['tutorName'] ?? 'tutor';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Rescheduling session with $tutorName')),
+  void _viewRescheduleRequests(Map<String, dynamic> booking) {
+    // Show reschedule requests dialog
+    showDialog(
+      context: context,
+      builder: (context) => RescheduleRequestsDialog(
+        booking: booking,
+        onSuccess: _loadBookings,
+      ),
     );
-    // TODO: Show reschedule dialog
   }
 
   Future<void> _cancelSession(Map<String, dynamic> booking) async {
