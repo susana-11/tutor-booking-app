@@ -82,10 +82,17 @@ exports.register = async (req, res) => {
       success: true,
       message: 'User registered successfully. Please check your email for verification code.',
       data: {
+        id: user._id.toString(),
         userId: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
         email: user.email,
+        phone: user.phone,
         role: user.role,
-        isEmailVerified: user.isEmailVerified
+        isEmailVerified: user.isEmailVerified,
+        profileCompleted: user.profileCompleted || false,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
       }
     });
 
