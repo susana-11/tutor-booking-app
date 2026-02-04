@@ -39,6 +39,35 @@ exports.startSession = async (req, res) => {
       });
     }
 
+    // Check if session is already active (student joining)
+    if (booking.session.isActive) {
+      console.log('📱 Student joining active session');
+      
+      // Generate Agora credentials for the joining student
+      const channelName = booking.session.agoraChannelName || `session_${bookingId}`;
+      const uid = isStudent ? 1 : 2;
+      const token = generateAgoraToken(channelName, uid);
+
+      return res.json({
+        success: true,
+        message: 'Joining active session',
+        data: {
+          bookingId: booking._id,
+          channelName,
+          token,
+          uid,
+          sessionStartedAt: booking.sessionStartedAt,
+          duration: booking.duration,
+          otherParty: {
+            id: isStudent ? booking.tutorId._id : booking.studentId._id,
+            name: isStudent 
+              ? `${booking.tutorId.firstName} ${booking.tutorId.lastName}`
+              : `${booking.studentId.firstName} ${booking.studentId.lastName}`
+          }
+        }
+      });
+    }
+
     // Check if session can be started
     if (!booking.canStartSession()) {
       return res.status(400).json({

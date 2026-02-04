@@ -121,6 +121,56 @@ class _StudentBookingsScreenState extends State<StudentBookingsScreen>
     }
   }
 
+  Future<void> _joinSession(Map<String, dynamic> booking) async {
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Join session (same endpoint, server will handle it)
+      final response = await _sessionService.startSession(booking['id']);
+
+      // Close loading
+      if (mounted) Navigator.pop(context);
+
+      if (response.success && response.data != null) {
+        // Navigate to active session screen
+        if (mounted) {
+          context.push(
+            '/active-session/${booking['id']}',
+            extra: response.data,
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response.error ?? 'Failed to join session'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Close loading
+      if (mounted) Navigator.pop(context);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -361,10 +411,11 @@ class _StudentBookingsScreenState extends State<StudentBookingsScreen>
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Session Action Button (Start Session)
+          // Session Action Button (Start/Join Session)
           SessionActionButton(
             booking: booking,
             onStartSession: () => _startSession(booking),
+            onJoinSession: () => _joinSession(booking),
           ),
           
           const SizedBox(height: AppTheme.spacingSM),
