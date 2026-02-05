@@ -1,9 +1,22 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, validationResult } = require('express-validator');
 const supportController = require('../controllers/supportController');
 const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Validation error handler middleware
+const handleValidationErrors = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(422).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+  next();
+};
 
 // Validation rules
 const createTicketValidation = [
@@ -46,11 +59,11 @@ const rateTicketValidation = [
 router.get('/faqs', supportController.getFAQs);
 
 // User routes (authenticated)
-router.post('/tickets', authenticate, createTicketValidation, supportController.createTicket);
+router.post('/tickets', authenticate, createTicketValidation, handleValidationErrors, supportController.createTicket);
 router.get('/tickets', authenticate, supportController.getUserTickets);
 router.get('/tickets/:ticketId', authenticate, supportController.getTicket);
-router.post('/tickets/:ticketId/messages', authenticate, addMessageValidation, supportController.addMessage);
-router.post('/tickets/:ticketId/rate', authenticate, rateTicketValidation, supportController.rateTicket);
+router.post('/tickets/:ticketId/messages', authenticate, addMessageValidation, handleValidationErrors, supportController.addMessage);
+router.post('/tickets/:ticketId/rate', authenticate, rateTicketValidation, handleValidationErrors, supportController.rateTicket);
 
 // Admin routes
 router.get('/admin/tickets', authenticate, authorize('admin'), supportController.getAllTickets);

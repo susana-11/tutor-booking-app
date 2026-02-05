@@ -40,7 +40,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final apiService = context.read<ApiService>();
+      final apiService = ApiService();
+      apiService.initialize();
       final supportService = SupportService(apiService);
       final ticket = await supportService.getTicket(widget.ticketId);
 
@@ -69,7 +70,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     setState(() => _isSending = true);
 
     try {
-      final apiService = context.read<ApiService>();
+      final apiService = ApiService();
+      apiService.initialize();
       final supportService = SupportService(apiService);
       final updatedTicket = await supportService.addMessage(
         widget.ticketId,

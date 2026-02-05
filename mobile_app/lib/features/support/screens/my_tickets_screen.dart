@@ -37,7 +37,8 @@ class _MyTicketsScreenState extends State<MyTicketsScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final apiService = context.read<ApiService>();
+      final apiService = ApiService();
+      apiService.initialize();
       final supportService = SupportService(apiService);
       final tickets = await supportService.getUserTickets(status: _selectedStatus);
 

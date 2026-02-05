@@ -51,10 +51,12 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final apiService = context.read<ApiService>();
+      final apiService = ApiService();
+      // Ensure API service is initialized
+      apiService.initialize();
       final supportService = SupportService(apiService);
 
-      await supportService.createTicket(
+      final ticket = await supportService.createTicket(
         subject: _subjectController.text.trim(),
         category: _selectedCategory,
         description: _descriptionController.text.trim(),
@@ -62,6 +64,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
       );
 
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Support ticket created successfully!'),
@@ -71,17 +74,15 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         context.pop();
       }
     } catch (e) {
+      print('❌ Create ticket error: $e');
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
       }
     }
   }
