@@ -22,6 +22,7 @@ import {
   Report,
   Settings,
   AdminPanelSettings,
+  SupportAgent,
 } from '@mui/icons-material';
 
 const menuItems = [
@@ -33,6 +34,7 @@ const menuItems = [
   { text: 'Payment Management', icon: <Payment />, path: '/payments' },
   { text: 'Analytics & Reports', icon: <Analytics />, path: '/analytics' },
   { text: 'Dispute Management', icon: <Report />, path: '/disputes' },
+  { text: 'Support Tickets', icon: <SupportAgent />, path: '/support-tickets' },
   { text: 'System Settings', icon: <Settings />, path: '/settings' },
 ];
 

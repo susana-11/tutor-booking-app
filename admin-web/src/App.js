@@ -13,6 +13,7 @@ import PaymentManagement from './pages/PaymentManagement';
 import Analytics from './pages/Analytics';
 import DisputeManagement from './pages/DisputeManagement';
 import SystemSettings from './pages/SystemSettings';
+import SupportTickets from './pages/SupportTickets';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 const DRAWER_WIDTH = 280;
@@ -62,6 +63,7 @@ function AppContent() {
           <Route path="/payments" element={<PaymentManagement />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/disputes" element={<DisputeManagement />} />
+          <Route path="/support-tickets" element={<SupportTickets />} />
           <Route path="/settings" element={<SystemSettings />} />
         </Routes>
       </Box>
