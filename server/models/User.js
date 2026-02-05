@@ -82,6 +82,41 @@ try {
     profileCompleted: {
       type: Boolean,
       default: false
+    },
+    // Notification preferences
+    notificationPreferences: {
+      emailNotifications: {
+        type: Boolean,
+        default: true
+      },
+      pushNotifications: {
+        type: Boolean,
+        default: true
+      },
+      bookingNotifications: {
+        type: Boolean,
+        default: true
+      },
+      messageNotifications: {
+        type: Boolean,
+        default: true
+      },
+      reviewNotifications: {
+        type: Boolean,
+        default: true
+      },
+      paymentNotifications: {
+        type: Boolean,
+        default: true
+      },
+      reminderNotifications: {
+        type: Boolean,
+        default: true
+      },
+      promotionalNotifications: {
+        type: Boolean,
+        default: false
+      }
     }
   }, {
     timestamps: true

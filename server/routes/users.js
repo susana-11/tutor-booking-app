@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 const { profileStorage } = require('../config/cloudinary');
+const userController = require('../controllers/userController');
 
 const router = express.Router();
 
@@ -131,5 +132,9 @@ router.post('/profile/picture', authenticate, upload.single('profilePicture'), a
     });
   }
 });
+
+// Notification preferences routes
+router.get('/notification-preferences', authenticate, userController.getNotificationPreferences);
+router.put('/notification-preferences', authenticate, userController.updateNotificationPreferences);
 
 module.exports = router;
