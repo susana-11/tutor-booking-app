@@ -20,33 +20,36 @@ import {
   Select,
   Switch,
   FormControlLabel,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Add,
   Edit,
   Delete,
   MoreVert,
-  School,
   Visibility,
   VisibilityOff,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
+import axios from 'axios';
 import toast from 'react-hot-toast';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://tutor-app-backend-wtru.onrender.com/api';
 
 const SubjectManagement = () => {
   const [subjects, setSubjects] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     category: '',
-    gradeLevel: '',
+    gradeLevel: [],
     isActive: true,
-    icon: '',
-    color: '#1976d2',
   });
 
   const categories = [
@@ -61,88 +64,53 @@ const SubjectManagement = () => {
   ];
 
   const gradeLevels = [
-    'Elementary (K-5)',
-    'Middle School (6-8)',
-    'High School (9-12)',
-    'College/University',
+    'Elementary',
+    'Middle School',
+    'High School',
+    'College',
     'Professional',
   ];
 
-  // Mock data - replace with API calls
   useEffect(() => {
-    setSubjects([
-      {
-        id: 1,
-        name: 'Algebra',
-        description: 'Basic algebraic concepts and problem solving',
-        category: 'Mathematics',
-        gradeLevel: 'High School (9-12)',
-        isActive: true,
-        tutorCount: 15,
-        studentCount: 45,
-        sessionCount: 120,
-        averageRating: 4.5,
-        createdDate: '2026-01-01',
-        color: '#2196F3',
-      },
-      {
-        id: 2,
-        name: 'Calculus',
-        description: 'Advanced calculus including derivatives and integrals',
-        category: 'Mathematics',
-        gradeLevel: 'College/University',
-        isActive: true,
-        tutorCount: 8,
-        studentCount: 25,
-        sessionCount: 80,
-        averageRating: 4.7,
-        createdDate: '2026-01-01',
-        color: '#4CAF50',
-      },
-      {
-        id: 3,
-        name: 'Physics',
-        description: 'Fundamental physics concepts and applications',
-        category: 'Sciences',
-        gradeLevel: 'High School (9-12)',
-        isActive: true,
-        tutorCount: 12,
-        studentCount: 38,
-        sessionCount: 95,
-        averageRating: 4.3,
-        createdDate: '2026-01-01',
-        color: '#FF9800',
-      },
-      {
-        id: 4,
-        name: 'Spanish',
-        description: 'Spanish language learning for beginners to advanced',
-        category: 'Languages',
-        gradeLevel: 'Elementary (K-5)',
-        isActive: true,
-        tutorCount: 6,
-        studentCount: 22,
-        sessionCount: 65,
-        averageRating: 4.6,
-        createdDate: '2026-01-01',
-        color: '#E91E63',
-      },
-      {
-        id: 5,
-        name: 'SAT Prep',
-        description: 'Comprehensive SAT test preparation',
-        category: 'Test Preparation',
-        gradeLevel: 'High School (9-12)',
-        isActive: false,
-        tutorCount: 4,
-        studentCount: 12,
-        sessionCount: 30,
-        averageRating: 4.2,
-        createdDate: '2026-01-01',
-        color: '#9C27B0',
-      },
-    ]);
+    fetchSubjects();
   }, []);
+
+  const fetchSubjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get(`${API_BASE_URL}/subjects/admin`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data.success) {
+        setSubjects(response.data.data.map(subject => ({
+          id: subject._id,
+          name: subject.name,
+          description: subject.description || '',
+          category: subject.category || 'General',
+          gradeLevel: subject.gradeLevel || [],
+          isActive: subject.isActive !== false,
+          tutorCount: 0, // Would need separate API call
+          studentCount: 0,
+          sessionCount: 0,
+          averageRating: 0,
+          createdDate: new Date(subject.createdAt).toLocaleDateString(),
+        })));
+      }
+    } catch (err) {
+      console.error('Failed to fetch subjects:', err);
+      const errorMessage = err.response?.data?.message || 'Failed to load subjects';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleOpenDialog = (subject = null) => {
     if (subject) {
@@ -153,8 +121,6 @@ const SubjectManagement = () => {
         category: subject.category,
         gradeLevel: subject.gradeLevel,
         isActive: subject.isActive,
-        icon: subject.icon || '',
-        color: subject.color || '#1976d2',
       });
     } else {
       setSelectedSubject(null);
@@ -162,10 +128,8 @@ const SubjectManagement = () => {
         name: '',
         description: '',
         category: '',
-        gradeLevel: '',
+        gradeLevel: [],
         isActive: true,
-        icon: '',
-        color: '#1976d2',
       });
     }
     setDialogOpen(true);
@@ -174,54 +138,44 @@ const SubjectManagement = () => {
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setSelectedSubject(null);
-    setFormData({
-      name: '',
-      description: '',
-      category: '',
-      gradeLevel: '',
-      isActive: true,
-      icon: '',
-      color: '#1976d2',
-    });
   };
 
   const handleSave = async () => {
     try {
+      const token = localStorage.getItem('adminToken');
+      const config = {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      };
+      
       if (selectedSubject) {
-        // Update existing subject
-        setSubjects(subjects.map(subject =>
-          subject.id === selectedSubject.id
-            ? { ...subject, ...formData }
-            : subject
-        ));
+        await axios.put(`${API_BASE_URL}/subjects/admin/${selectedSubject.id}`, formData, config);
         toast.success('Subject updated successfully');
       } else {
-        // Create new subject
-        const newSubject = {
-          id: Math.max(...subjects.map(s => s.id)) + 1,
-          ...formData,
-          tutorCount: 0,
-          studentCount: 0,
-          sessionCount: 0,
-          averageRating: 0,
-          createdDate: new Date().toISOString().split('T')[0],
-        };
-        setSubjects([...subjects, newSubject]);
+        await axios.post(`${API_BASE_URL}/subjects/admin`, formData, config);
         toast.success('Subject created successfully');
       }
       handleCloseDialog();
+      fetchSubjects();
     } catch (error) {
-      toast.error('Failed to save subject');
+      toast.error(error.response?.data?.message || 'Failed to save subject');
     }
   };
 
   const handleDelete = async (subjectId) => {
     if (window.confirm('Are you sure you want to delete this subject?')) {
       try {
-        setSubjects(subjects.filter(subject => subject.id !== subjectId));
+        const token = localStorage.getItem('adminToken');
+        await axios.delete(`${API_BASE_URL}/subjects/admin/${subjectId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         toast.success('Subject deleted successfully');
+        fetchSubjects();
       } catch (error) {
-        toast.error('Failed to delete subject');
+        toast.error(error.response?.data?.message || 'Failed to delete subject');
       }
     }
     handleActionClose();
@@ -229,14 +183,20 @@ const SubjectManagement = () => {
 
   const handleToggleStatus = async (subjectId) => {
     try {
-      setSubjects(subjects.map(subject =>
-        subject.id === subjectId
-          ? { ...subject, isActive: !subject.isActive }
-          : subject
-      ));
+      const subject = subjects.find(s => s.id === subjectId);
+      const token = localStorage.getItem('adminToken');
+      await axios.put(`${API_BASE_URL}/subjects/admin/${subjectId}`, {
+        ...subject,
+        isActive: !subject.isActive
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       toast.success('Subject status updated');
+      fetchSubjects();
     } catch (error) {
-      toast.error('Failed to update subject status');
+      toast.error(error.response?.data?.message || 'Failed to update subject status');
     }
     handleActionClose();
   };
@@ -248,7 +208,6 @@ const SubjectManagement = () => {
 
   const handleActionClose = () => {
     setActionMenuAnchor(null);
-    setSelectedSubject(null);
   };
 
   const columns = [
@@ -257,20 +216,9 @@ const SubjectManagement = () => {
       headerName: 'Subject',
       width: 200,
       renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Box
-            sx={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              backgroundColor: params.row.color,
-              mr: 1,
-            }}
-          />
-          <Typography variant="body2" fontWeight="medium">
-            {params.value}
-          </Typography>
-        </Box>
+        <Typography variant="body2" fontWeight="medium">
+          {params.value}
+        </Typography>
       ),
     },
     {
@@ -284,35 +232,13 @@ const SubjectManagement = () => {
     {
       field: 'gradeLevel',
       headerName: 'Grade Level',
-      width: 180,
-    },
-    {
-      field: 'tutorCount',
-      headerName: 'Tutors',
-      width: 100,
-      type: 'number',
-    },
-    {
-      field: 'studentCount',
-      headerName: 'Students',
-      width: 100,
-      type: 'number',
-    },
-    {
-      field: 'sessionCount',
-      headerName: 'Sessions',
-      width: 100,
-      type: 'number',
-    },
-    {
-      field: 'averageRating',
-      headerName: 'Rating',
-      width: 100,
+      width: 200,
       renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Typography variant="body2">
-            {params.value > 0 ? params.value.toFixed(1) : 'N/A'}
-          </Typography>
+        <Box>
+          {params.value.slice(0, 2).map((level, index) => (
+            <Chip key={index} label={level} size="small" sx={{ mr: 0.5 }} />
+          ))}
+          {params.value.length > 2 && ` +${params.value.length - 2}`}
         </Box>
       ),
     },
@@ -327,6 +253,11 @@ const SubjectManagement = () => {
           size="small"
         />
       ),
+    },
+    {
+      field: 'createdDate',
+      headerName: 'Created',
+      width: 120,
     },
     {
       field: 'actions',
@@ -344,6 +275,16 @@ const SubjectManagement = () => {
       filterable: false,
     },
   ];
+
+  if (error) {
+    return (
+      <Box>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box>
@@ -382,30 +323,6 @@ const SubjectManagement = () => {
               </Typography>
               <Typography variant="h4">
                 {subjects.filter(s => s.isActive).length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom variant="overline">
-                Total Tutors
-              </Typography>
-              <Typography variant="h4">
-                {subjects.reduce((sum, s) => sum + s.tutorCount, 0)}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom variant="overline">
-                Total Sessions
-              </Typography>
-              <Typography variant="h4">
-                {subjects.reduce((sum, s) => sum + s.sessionCount, 0)}
               </Typography>
             </CardContent>
           </Card>
@@ -499,14 +416,21 @@ const SubjectManagement = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12}>
               <FormControl fullWidth>
-                <InputLabel>Grade Level</InputLabel>
+                <InputLabel>Grade Levels</InputLabel>
                 <Select
+                  multiple
                   value={formData.gradeLevel}
-                  label="Grade Level"
+                  label="Grade Levels"
                   onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
-                  required
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {selected.map((value) => (
+                        <Chip key={value} label={value} size="small" />
+                      ))}
+                    </Box>
+                  )}
                 >
                   {gradeLevels.map((level) => (
                     <MenuItem key={level} value={level}>
@@ -515,16 +439,6 @@ const SubjectManagement = () => {
                   ))}
                 </Select>
               </FormControl>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Color"
-                type="color"
-                value={formData.color}
-                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                InputLabelProps={{ shrink: true }}
-              />
             </Grid>
             <Grid item xs={12}>
               <TextField
@@ -554,7 +468,7 @@ const SubjectManagement = () => {
           <Button 
             variant="contained" 
             onClick={handleSave}
-            disabled={!formData.name || !formData.category || !formData.gradeLevel}
+            disabled={!formData.name || !formData.category}
           >
             {selectedSubject ? 'Update' : 'Create'}
           </Button>

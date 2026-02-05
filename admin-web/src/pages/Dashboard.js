@@ -13,9 +13,9 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Chip,
-  IconButton,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   People,
@@ -24,7 +24,6 @@ import {
   AttachMoney,
   TrendingUp,
   TrendingDown,
-  MoreVert,
 } from '@mui/icons-material';
 import {
   LineChart,
@@ -37,76 +36,35 @@ import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
 } from 'recharts';
+import axios from 'axios';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://tutor-app-backend-wtru.onrender.com/api';
 
 const Dashboard = () => {
-  const [stats, setStats] = useState({
-    totalUsers: 1250,
-    totalTutors: 89,
-    totalBookings: 456,
-    totalRevenue: 12450,
-    pendingVerifications: 12,
-    activeDisputes: 3,
-  });
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [recentBookings] = useState([
-    {
-      id: 1,
-      student: 'John Doe',
-      tutor: 'Dr. Sarah Johnson',
-      subject: 'Mathematics',
-      date: '2026-01-30',
-      status: 'confirmed',
-      amount: 45,
-    },
-    {
-      id: 2,
-      student: 'Jane Smith',
-      tutor: 'Prof. Michael Chen',
-      subject: 'Physics',
-      date: '2026-01-30',
-      status: 'pending',
-      amount: 55,
-    },
-    {
-      id: 3,
-      student: 'Bob Wilson',
-      tutor: 'Ms. Emily Davis',
-      subject: 'English',
-      date: '2026-01-29',
-      status: 'completed',
-      amount: 35,
-    },
-    {
-      id: 4,
-      student: 'Alice Brown',
-      tutor: 'Dr. Ahmed Hassan',
-      subject: 'Chemistry',
-      date: '2026-01-29',
-      status: 'cancelled',
-      amount: 50,
-    },
-  ]);
+  useEffect(() => {
+    fetchDashboardStats();
+  }, []);
 
-  const [chartData] = useState([
-    { name: 'Jan', bookings: 65, revenue: 2400 },
-    { name: 'Feb', bookings: 59, revenue: 2210 },
-    { name: 'Mar', bookings: 80, revenue: 2290 },
-    { name: 'Apr', bookings: 81, revenue: 2000 },
-    { name: 'May', bookings: 56, revenue: 2181 },
-    { name: 'Jun', bookings: 55, revenue: 2500 },
-    { name: 'Jul', bookings: 40, revenue: 2100 },
-  ]);
-
-  const [subjectData] = useState([
-    { name: 'Mathematics', value: 35, color: '#0088FE' },
-    { name: 'Physics', value: 25, color: '#00C49F' },
-    { name: 'Chemistry', value: 20, color: '#FFBB28' },
-    { name: 'English', value: 15, color: '#FF8042' },
-    { name: 'Others', value: 5, color: '#8884D8' },
-  ]);
+  const fetchDashboardStats = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${API_BASE_URL}/admin/stats`);
+      
+      if (response.data.success) {
+        setStats(response.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch dashboard stats:', err);
+      setError(err.response?.data?.message || 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const StatCard = ({ title, value, icon, trend, trendValue, color }) => (
     <Card sx={{ height: '100%' }}>
@@ -116,27 +74,33 @@ const Dashboard = () => {
             <Typography color="textSecondary" gutterBottom variant="overline">
               {title}
             </Typography>
-            <Typography variant="h4" component="h2">
-              {typeof value === 'number' && title.includes('Revenue') 
-                ? `$${value.toLocaleString()}` 
-                : value.toLocaleString()}
-            </Typography>
-            {trend && (
-              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                {trend === 'up' ? (
-                  <TrendingUp sx={{ color: 'success.main', mr: 0.5 }} />
-                ) : (
-                  <TrendingDown sx={{ color: 'error.main', mr: 0.5 }} />
-                )}
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: trend === 'up' ? 'success.main' : 'error.main',
-                  }}
-                >
-                  {trendValue}% from last month
+            {loading ? (
+              <CircularProgress size={24} sx={{ my: 1 }} />
+            ) : (
+              <>
+                <Typography variant="h4" component="h2">
+                  {typeof value === 'number' && title.includes('Revenue') 
+                    ? `ETB ${value.toLocaleString()}` 
+                    : value?.toLocaleString() || 0}
                 </Typography>
-              </Box>
+                {trend && trendValue && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                    {trend === 'up' ? (
+                      <TrendingUp sx={{ color: 'success.main', mr: 0.5 }} />
+                    ) : (
+                      <TrendingDown sx={{ color: 'error.main', mr: 0.5 }} />
+                    )}
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: trend === 'up' ? 'success.main' : 'error.main',
+                      }}
+                    >
+                      {trendValue}
+                    </Typography>
+                  </Box>
+                )}
+              </>
             )}
           </Box>
           <Avatar sx={{ bgcolor: color, width: 56, height: 56 }}>
@@ -148,7 +112,7 @@ const Dashboard = () => {
   );
 
   const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
+    switch (status?.toLowerCase()) {
       case 'confirmed':
         return 'success';
       case 'pending':
@@ -162,6 +126,24 @@ const Dashboard = () => {
     }
   };
 
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  if (error) {
+    return (
+      <Box>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Typography variant="h4" sx={{ mb: 4, fontWeight: 'bold' }}>
@@ -173,99 +155,137 @@ const Dashboard = () => {
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Total Users"
-            value={stats.totalUsers}
+            value={stats?.users?.total}
             icon={<People />}
             trend="up"
-            trendValue={12}
+            trendValue={`${stats?.users?.newThisMonth || 0} new this month`}
             color="primary.main"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Active Tutors"
-            value={stats.totalTutors}
+            value={stats?.tutors?.approved}
             icon={<School />}
             trend="up"
-            trendValue={8}
+            trendValue={`${stats?.tutors?.pending || 0} pending`}
             color="success.main"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Total Bookings"
-            value={stats.totalBookings}
+            value={stats?.bookings?.total}
             icon={<EventNote />}
             trend="up"
-            trendValue={15}
+            trendValue={`${stats?.bookings?.thisMonth || 0} this month`}
             color="warning.main"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            title="Monthly Revenue"
-            value={stats.totalRevenue}
+            title="Platform Revenue"
+            value={stats?.revenue?.platform}
             icon={<AttachMoney />}
             trend="up"
-            trendValue={23}
+            trendValue={`ETB ${(stats?.revenue?.platformThisMonth || 0).toLocaleString()} this month`}
             color="error.main"
           />
         </Grid>
       </Grid>
 
-      {/* Charts */}
+      {/* Booking Status Breakdown */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={8}>
+        <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Bookings & Revenue Trend
+                Booking Status Breakdown
               </Typography>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis yAxisId="left" />
-                  <YAxis yAxisId="right" orientation="right" />
-                  <Tooltip />
-                  <Bar yAxisId="left" dataKey="bookings" fill="#8884d8" />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#82ca9d"
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <Grid container spacing={2} sx={{ mt: 1 }}>
+                  <Grid item xs={6}>
+                    <Box sx={{ textAlign: 'center', p: 2 }}>
+                      <Typography variant="h4" color="warning.main">
+                        {stats?.bookings?.pending || 0}
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        Pending
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Box sx={{ textAlign: 'center', p: 2 }}>
+                      <Typography variant="h4" color="info.main">
+                        {stats?.bookings?.confirmed || 0}
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        Confirmed
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Box sx={{ textAlign: 'center', p: 2 }}>
+                      <Typography variant="h4" color="success.main">
+                        {stats?.bookings?.completed || 0}
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        Completed
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Box sx={{ textAlign: 'center', p: 2 }}>
+                      <Typography variant="h4" color="error.main">
+                        {stats?.bookings?.cancelled || 0}
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        Cancelled
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+              )}
             </CardContent>
           </Card>
         </Grid>
-        
-        <Grid item xs={12} md={4}>
+
+        <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Popular Subjects
+                Revenue Breakdown
               </Typography>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={subjectData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {subjectData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <Box sx={{ mt: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                    <Typography variant="body1">Total Revenue</Typography>
+                    <Typography variant="h6">
+                      ETB {(stats?.revenue?.total || 0).toLocaleString()}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, p: 2, bgcolor: 'success.50', borderRadius: 1 }}>
+                    <Typography variant="body1">Platform Fee (15%)</Typography>
+                    <Typography variant="h6" color="success.main">
+                      ETB {(stats?.revenue?.platform || 0).toLocaleString()}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: 'info.50', borderRadius: 1 }}>
+                    <Typography variant="body1">Tutor Earnings (85%)</Typography>
+                    <Typography variant="h6" color="info.main">
+                      ETB {(stats?.revenue?.tutors || 0).toLocaleString()}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -279,44 +299,52 @@ const Dashboard = () => {
               <Typography variant="h6" gutterBottom>
                 Recent Bookings
               </Typography>
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Student</TableCell>
-                      <TableCell>Tutor</TableCell>
-                      <TableCell>Subject</TableCell>
-                      <TableCell>Date</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>Amount</TableCell>
-                      <TableCell>Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {recentBookings.map((booking) => (
-                      <TableRow key={booking.id}>
-                        <TableCell>{booking.student}</TableCell>
-                        <TableCell>{booking.tutor}</TableCell>
-                        <TableCell>{booking.subject}</TableCell>
-                        <TableCell>{booking.date}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={booking.status}
-                            color={getStatusColor(booking.status)}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>${booking.amount}</TableCell>
-                        <TableCell>
-                          <IconButton size="small">
-                            <MoreVert />
-                          </IconButton>
-                        </TableCell>
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : stats?.recentActivity?.bookings?.length > 0 ? (
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Student</TableCell>
+                        <TableCell>Tutor</TableCell>
+                        <TableCell>Subject</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Amount</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {stats.recentActivity.bookings.map((booking) => (
+                        <TableRow key={booking._id}>
+                          <TableCell>
+                            {booking.studentId?.firstName} {booking.studentId?.lastName}
+                          </TableCell>
+                          <TableCell>
+                            {booking.tutorId?.firstName} {booking.tutorId?.lastName}
+                          </TableCell>
+                          <TableCell>{booking.subject?.name || 'N/A'}</TableCell>
+                          <TableCell>{formatDate(booking.sessionDate)}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={booking.status}
+                              color={getStatusColor(booking.status)}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>ETB {booking.totalAmount}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Typography color="textSecondary" sx={{ py: 4, textAlign: 'center' }}>
+                  No recent bookings
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -327,58 +355,85 @@ const Dashboard = () => {
               <Typography variant="h6" gutterBottom>
                 Pending Actions
               </Typography>
-              <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="body2">Tutor Verifications</Typography>
-                  <Typography variant="body2" color="warning.main">
-                    {stats.pendingVerifications}
-                  </Typography>
-                </Box>
-                <LinearProgress
-                  variant="determinate"
-                  value={(stats.pendingVerifications / 20) * 100}
-                  color="warning"
-                />
-              </Box>
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="body2">Active Disputes</Typography>
-                  <Typography variant="body2" color="error.main">
-                    {stats.activeDisputes}
-                  </Typography>
-                </Box>
-                <LinearProgress
-                  variant="determinate"
-                  value={(stats.activeDisputes / 10) * 100}
-                  color="error"
-                />
-              </Box>
+              {loading ? (
+                <CircularProgress size={24} />
+              ) : (
+                <>
+                  <Box sx={{ mb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant="body2">Tutor Verifications</Typography>
+                      <Typography variant="body2" color="warning.main">
+                        {stats?.tutors?.pending || 0}
+                      </Typography>
+                    </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={Math.min(((stats?.tutors?.pending || 0) / 20) * 100, 100)}
+                      color="warning"
+                    />
+                  </Box>
+                  <Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant="body2">Pending Bookings</Typography>
+                      <Typography variant="body2" color="info.main">
+                        {stats?.bookings?.pending || 0}
+                      </Typography>
+                    </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={Math.min(((stats?.bookings?.pending || 0) / 50) * 100, 100)}
+                      color="info"
+                    />
+                  </Box>
+                </>
+              )}
             </CardContent>
           </Card>
 
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                System Health
+                Recent Users
               </Typography>
-              <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="body2">Server Status</Typography>
-                  <Typography variant="body2" color="success.main">
-                    Online
-                  </Typography>
+              {loading ? (
+                <CircularProgress size={24} />
+              ) : stats?.recentActivity?.users?.length > 0 ? (
+                <Box>
+                  {stats.recentActivity.users.map((user) => (
+                    <Box
+                      key={user._id}
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        mb: 2,
+                        pb: 2,
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                        '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 },
+                      }}
+                    >
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {user.firstName} {user.lastName}
+                        </Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          {user.email}
+                        </Typography>
+                      </Box>
+                      <Chip
+                        label={user.role}
+                        color={user.role === 'tutor' ? 'primary' : 'secondary'}
+                        size="small"
+                      />
+                    </Box>
+                  ))}
                 </Box>
-                <LinearProgress variant="determinate" value={98} color="success" />
-              </Box>
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="body2">Database</Typography>
-                  <Typography variant="body2" color="success.main">
-                    Healthy
-                  </Typography>
-                </Box>
-                <LinearProgress variant="determinate" value={95} color="success" />
-              </Box>
+              ) : (
+                <Typography color="textSecondary" variant="body2">
+                  No recent users
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>

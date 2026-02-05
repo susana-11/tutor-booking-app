@@ -76,16 +76,26 @@ class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
 
   Future<void> _markAsRead(String id) async {
     try {
+      // Check if notification is already read
+      final index = _notifications.indexWhere((n) => n['_id'] == id);
+      if (index != -1 && _notifications[index]['read'] == true) {
+        return; // Already read, no need to update
+      }
+      
+      // Mark as read on server
       await _notificationService.markAsRead(id);
       
+      // Update local state
       setState(() {
-        final index = _notifications.indexWhere((n) => n['_id'] == id);
         if (index != -1) {
           _notifications[index]['read'] = true;
         }
       });
+      
+      // Immediately refresh unread count
+      await _notificationService.refreshUnreadCount();
     } catch (e) {
-      print('Error marking as read: $e');
+      print('❌ Error marking as read: $e');
     }
   }
 
@@ -338,6 +348,10 @@ class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
                         notification['read'] = true;
                       }
                     });
+                    
+                    // Refresh unread count after marking all as read
+                    await _notificationService.refreshUnreadCount();
+                    
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(

@@ -165,9 +165,17 @@ exports.getAllSubjectsAdmin = async (req, res) => {
       .populate('createdBy', 'firstName lastName')
       .sort({ category: 1, name: 1 });
 
-    res.json(subjects);
+    res.json({
+      success: true,
+      data: subjects,
+      count: subjects.length
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching subjects for admin:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };
 

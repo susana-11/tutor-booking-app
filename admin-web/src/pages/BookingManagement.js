@@ -15,47 +15,73 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  CircularProgress,
+  Alert,
+  Paper,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import { Visibility, Cancel, CheckCircle } from '@mui/icons-material';
+import { Visibility } from '@mui/icons-material';
+import axios from 'axios';
 import toast from 'react-hot-toast';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://tutor-app-backend-wtru.onrender.com/api';
 
 const BookingManagement = () => {
   const [bookings, setBookings] = useState([]);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0 });
 
   useEffect(() => {
-    // Mock data
-    setBookings([
-      {
-        id: 1,
-        student: 'John Doe',
-        tutor: 'Dr. Sarah Johnson',
-        subject: 'Mathematics',
-        date: '2026-02-01',
-        time: '10:00 AM - 11:00 AM',
-        status: 'confirmed',
-        amount: 45,
-        mode: 'online',
-        createdAt: '2026-01-30',
-      },
-      {
-        id: 2,
-        student: 'Jane Smith',
-        tutor: 'Prof. Michael Chen',
-        subject: 'Physics',
-        date: '2026-02-02',
-        time: '2:00 PM - 3:00 PM',
-        status: 'pending',
-        amount: 55,
-        mode: 'in-person',
-        createdAt: '2026-01-29',
-      },
-      // Add more mock data...
-    ]);
-  }, []);
+    fetchBookings();
+  }, [filterStatus, pagination.page]);
+
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      const params = {
+        page: pagination.page,
+        limit: pagination.limit,
+      };
+      if (filterStatus !== 'all') {
+        params.status = filterStatus;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/admin/bookings`, { params });
+      
+      if (response.data.success) {
+        setBookings(response.data.data.bookings.map(booking => ({
+          id: booking._id,
+          student: `${booking.studentId?.firstName || ''} ${booking.studentId?.lastName || ''}`.trim() || 'N/A',
+          studentEmail: booking.studentId?.email || 'N/A',
+          tutor: `${booking.tutorId?.firstName || ''} ${booking.tutorId?.lastName || ''}`.trim() || 'N/A',
+          tutorEmail: booking.tutorId?.email || 'N/A',
+          subject: booking.subject?.name || 'N/A',
+          date: new Date(booking.sessionDate).toLocaleDateString(),
+          time: `${booking.startTime} - ${booking.endTime}`,
+          status: booking.status,
+          amount: booking.totalAmount,
+          mode: booking.sessionType,
+          paymentStatus: booking.paymentStatus || booking.payment?.status || 'pending',
+          createdAt: new Date(booking.createdAt).toLocaleDateString(),
+          duration: booking.duration,
+          bookingData: booking,
+        })));
+        setPagination(prev => ({
+          ...prev,
+          total: response.data.data.pagination.total,
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch bookings:', err);
+      setError(err.response?.data?.message || 'Failed to load bookings');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -63,14 +89,52 @@ const BookingManagement = () => {
       case 'pending': return 'warning';
       case 'completed': return 'info';
       case 'cancelled': return 'error';
+      case 'rejected': return 'error';
       default: return 'default';
     }
   };
 
   const columns = [
-    { field: 'id', headerName: 'ID', width: 70 },
-    { field: 'student', headerName: 'Student', width: 150 },
-    { field: 'tutor', headerName: 'Tutor', width: 150 },
+    { 
+      field: 'id', 
+      headerName: 'ID', 
+      width: 100,
+      renderCell: (params) => (
+        <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
+          {params.value.slice(-8)}
+        </Typography>
+      ),
+    },
+    { 
+      field: 'student', 
+      headerName: 'Student', 
+      width: 150,
+      renderCell: (params) => (
+        <Box>
+          <Typography variant="body2" fontWeight="medium">
+            {params.value}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {params.row.studentEmail}
+          </Typography>
+        </Box>
+      ),
+    },
+    { 
+      field: 'tutor', 
+      headerName: 'Tutor', 
+      width: 150,
+      renderCell: (params) => (
+        <Box>
+          <Typography variant="body2" fontWeight="medium">
+            {params.value}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {params.row.tutorEmail}
+          </Typography>
+        </Box>
+      ),
+    },
     { field: 'subject', headerName: 'Subject', width: 120 },
     { field: 'date', headerName: 'Date', width: 120 },
     { field: 'time', headerName: 'Time', width: 150 },
@@ -83,6 +147,7 @@ const BookingManagement = () => {
           label={params.value}
           color={getStatusColor(params.value)}
           size="small"
+          sx={{ textTransform: 'capitalize' }}
         />
       ),
     },
@@ -90,7 +155,19 @@ const BookingManagement = () => {
       field: 'amount',
       headerName: 'Amount',
       width: 100,
-      renderCell: (params) => `$${params.value}`,
+      renderCell: (params) => `ETB ${params.value}`,
+    },
+    {
+      field: 'mode',
+      headerName: 'Mode',
+      width: 100,
+      renderCell: (params) => (
+        <Chip
+          label={params.value === 'online' ? 'Online' : 'In-Person'}
+          size="small"
+          variant="outlined"
+        />
+      ),
     },
     {
       field: 'actions',
@@ -108,8 +185,20 @@ const BookingManagement = () => {
           View
         </Button>
       ),
+      sortable: false,
+      filterable: false,
     },
   ];
+
+  if (error) {
+    return (
+      <Box>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box>
@@ -135,6 +224,18 @@ const BookingManagement = () => {
               </Select>
             </FormControl>
           </Grid>
+          <Grid item xs={12} md={9}>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Paper sx={{ p: 2, flex: 1 }}>
+                <Typography variant="caption" color="text.secondary">Total Bookings</Typography>
+                <Typography variant="h6">{pagination.total}</Typography>
+              </Paper>
+              <Paper sx={{ p: 2, flex: 1 }}>
+                <Typography variant="caption" color="text.secondary">Showing</Typography>
+                <Typography variant="h6">{bookings.length}</Typography>
+              </Paper>
+            </Box>
+          </Grid>
         </Grid>
       </Card>
 
@@ -143,9 +244,19 @@ const BookingManagement = () => {
           <DataGrid
             rows={bookings}
             columns={columns}
-            pageSize={10}
-            rowsPerPageOptions={[10, 25, 50]}
+            pageSize={pagination.limit}
+            rowsPerPageOptions={[10, 20, 50]}
             disableSelectionOnClick
+            loading={loading}
+            rowCount={pagination.total}
+            paginationMode="server"
+            onPageChange={(newPage) => setPagination(prev => ({ ...prev, page: newPage + 1 }))}
+            sx={{
+              border: 'none',
+              '& .MuiDataGrid-cell': {
+                borderBottom: '1px solid #f0f0f0',
+              },
+            }}
           />
         </Box>
       </Card>
@@ -161,6 +272,7 @@ const BookingManagement = () => {
                   label="Student"
                   value={selectedBooking.student}
                   InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -169,6 +281,7 @@ const BookingManagement = () => {
                   label="Tutor"
                   value={selectedBooking.tutor}
                   InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -177,14 +290,79 @@ const BookingManagement = () => {
                   label="Subject"
                   value={selectedBooking.subject}
                   InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
                   label="Amount"
-                  value={`$${selectedBooking.amount}`}
+                  value={`ETB ${selectedBooking.amount}`}
                   InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Date"
+                  value={selectedBooking.date}
+                  InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Time"
+                  value={selectedBooking.time}
+                  InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Duration"
+                  value={`${selectedBooking.duration} minutes`}
+                  InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Mode"
+                  value={selectedBooking.mode === 'online' ? 'Online' : 'In-Person'}
+                  InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Booking Status"
+                  value={selectedBooking.status}
+                  InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Payment Status"
+                  value={selectedBooking.paymentStatus}
+                  InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Created At"
+                  value={selectedBooking.createdAt}
+                  InputProps={{ readOnly: true }}
+                  InputLabelProps={{ shrink: true }}
                 />
               </Grid>
             </Grid>
@@ -192,16 +370,6 @@ const BookingManagement = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Close</Button>
-          {selectedBooking?.status === 'pending' && (
-            <>
-              <Button color="error" startIcon={<Cancel />}>
-                Cancel Booking
-              </Button>
-              <Button variant="contained" startIcon={<CheckCircle />}>
-                Confirm Booking
-              </Button>
-            </>
-          )}
         </DialogActions>
       </Dialog>
     </Box>

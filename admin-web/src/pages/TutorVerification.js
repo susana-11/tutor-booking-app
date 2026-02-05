@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
-  CardContent,
   Typography,
   Button,
   Chip,
@@ -13,7 +12,6 @@ import {
   DialogActions,
   Grid,
   TextField,
-  Divider,
   List,
   ListItem,
   ListItemText,
@@ -22,134 +20,70 @@ import {
   Rating,
   Tab,
   Tabs,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   CheckCircle,
   Cancel,
   Visibility,
-  School,
-  Work,
-  Star,
   AttachFile,
-  Email,
-  Phone,
-  LocationOn,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
+import axios from 'axios';
 import toast from 'react-hot-toast';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://tutor-app-backend-wtru.onrender.com/api';
 
 const TutorVerification = () => {
   const [tutors, setTutors] = useState([]);
   const [selectedTutor, setSelectedTutor] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [tabValue, setTabValue] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Mock data - replace with API calls
   useEffect(() => {
-    setTutors([
-      {
-        id: 1,
-        firstName: 'Sarah',
-        lastName: 'Johnson',
-        email: 'sarah.johnson@email.com',
-        phone: '+1234567891',
-        status: 'pending',
-        appliedDate: '2026-01-28',
-        subjects: ['Mathematics', 'Physics'],
-        experience: '5 years',
-        education: 'PhD in Mathematics, MIT',
-        hourlyRate: 45,
-        bio: 'Experienced mathematics tutor with a passion for helping students understand complex concepts.',
-        documents: [
-          { name: 'Degree Certificate', type: 'pdf', verified: false },
-          { name: 'Teaching Certificate', type: 'pdf', verified: false },
-          { name: 'ID Proof', type: 'pdf', verified: false },
-        ],
-        profilePicture: null,
-        location: 'Boston, MA',
-        languages: ['English', 'Spanish'],
-        availability: 'Weekdays 9 AM - 5 PM',
-        teachingMode: 'Both Online & In-Person',
-      },
-      {
-        id: 2,
-        firstName: 'Michael',
-        lastName: 'Chen',
-        email: 'michael.chen@email.com',
-        phone: '+1234567892',
-        status: 'pending',
-        appliedDate: '2026-01-25',
-        subjects: ['Physics', 'Chemistry'],
-        experience: '8 years',
-        education: 'PhD in Physics, Stanford',
-        hourlyRate: 55,
-        bio: 'Physics professor with extensive research background and teaching experience.',
-        documents: [
-          { name: 'Degree Certificate', type: 'pdf', verified: true },
-          { name: 'Teaching Certificate', type: 'pdf', verified: true },
-          { name: 'ID Proof', type: 'pdf', verified: false },
-        ],
-        profilePicture: null,
-        location: 'San Francisco, CA',
-        languages: ['English', 'Mandarin'],
-        availability: 'Flexible',
-        teachingMode: 'Online Only',
-      },
-      {
-        id: 3,
-        firstName: 'Emily',
-        lastName: 'Davis',
-        email: 'emily.davis@email.com',
-        phone: '+1234567893',
-        status: 'approved',
-        appliedDate: '2026-01-20',
-        approvedDate: '2026-01-22',
-        subjects: ['English', 'Literature'],
-        experience: '3 years',
-        education: 'MA in English Literature, Harvard',
-        hourlyRate: 35,
-        bio: 'English literature enthusiast helping students improve their writing and comprehension skills.',
-        documents: [
-          { name: 'Degree Certificate', type: 'pdf', verified: true },
-          { name: 'Teaching Certificate', type: 'pdf', verified: true },
-          { name: 'ID Proof', type: 'pdf', verified: true },
-        ],
-        profilePicture: null,
-        location: 'Cambridge, MA',
-        languages: ['English'],
-        availability: 'Evenings and Weekends',
-        teachingMode: 'In-Person Only',
-        rating: 4.8,
-        totalSessions: 25,
-      },
-      {
-        id: 4,
-        firstName: 'Ahmed',
-        lastName: 'Hassan',
-        email: 'ahmed.hassan@email.com',
-        phone: '+1234567894',
-        status: 'rejected',
-        appliedDate: '2026-01-15',
-        rejectedDate: '2026-01-18',
-        rejectionReason: 'Insufficient documentation provided',
-        subjects: ['Chemistry', 'Biology'],
-        experience: '2 years',
-        education: 'BS in Chemistry, Local University',
-        hourlyRate: 30,
-        bio: 'Chemistry student looking to help others with basic chemistry concepts.',
-        documents: [
-          { name: 'Degree Certificate', type: 'pdf', verified: false },
-          { name: 'ID Proof', type: 'pdf', verified: false },
-        ],
-        profilePicture: null,
-        location: 'New York, NY',
-        languages: ['English', 'Arabic'],
-        availability: 'Weekends Only',
-        teachingMode: 'Both Online & In-Person',
-      },
-    ]);
+    fetchTutors();
   }, []);
+
+  const fetchTutors = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${API_BASE_URL}/admin/tutors`);
+      
+      if (response.data) {
+        const tutorsData = Array.isArray(response.data) ? response.data : [];
+        setTutors(tutorsData.map(tutor => ({
+          id: tutor._id,
+          firstName: tutor.userId?.firstName || 'N/A',
+          lastName: tutor.userId?.lastName || 'N/A',
+          email: tutor.userId?.email || 'N/A',
+          phone: tutor.userId?.phone || 'N/A',
+          status: tutor.status,
+          appliedDate: new Date(tutor.createdAt).toLocaleDateString(),
+          subjects: tutor.subjects?.map(s => s.name || s) || [],
+          experience: tutor.experience || 'Not specified',
+          education: tutor.education || 'Not specified',
+          hourlyRate: tutor.pricing?.hourlyRate || 0,
+          bio: tutor.bio || 'No bio provided',
+          location: tutor.location || 'Not specified',
+          languages: tutor.languages || [],
+          availability: tutor.availability || 'Not specified',
+          teachingMode: tutor.teachingMode || 'Not specified',
+          rating: tutor.stats?.averageRating || 0,
+          totalSessions: tutor.stats?.totalSessions || 0,
+          rejectionReason: tutor.rejectionReason,
+          profileData: tutor,
+        })));
+      }
+    } catch (err) {
+      console.error('Failed to fetch tutors:', err);
+      setError(err.response?.data?.message || 'Failed to load tutors');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleViewDetails = (tutor) => {
     setSelectedTutor(tutor);
@@ -159,36 +93,26 @@ const TutorVerification = () => {
 
   const handleApprove = async (tutorId) => {
     try {
-      // API call would go here
-      setTutors(tutors.map(tutor => 
-        tutor.id === tutorId 
-          ? { ...tutor, status: 'approved', approvedDate: new Date().toISOString().split('T')[0] }
-          : tutor
-      ));
+      await axios.post(`${API_BASE_URL}/admin/tutors/${tutorId}/approve`);
       toast.success('Tutor approved successfully');
       setDialogOpen(false);
+      fetchTutors();
     } catch (error) {
-      toast.error('Failed to approve tutor');
+      toast.error(error.response?.data?.message || 'Failed to approve tutor');
     }
   };
 
-  const handleReject = async (tutorId, reason) => {
+  const handleReject = async (tutorId) => {
+    const reason = prompt('Please provide a reason for rejection:');
+    if (!reason) return;
+
     try {
-      // API call would go here
-      setTutors(tutors.map(tutor => 
-        tutor.id === tutorId 
-          ? { 
-              ...tutor, 
-              status: 'rejected', 
-              rejectedDate: new Date().toISOString().split('T')[0],
-              rejectionReason: reason 
-            }
-          : tutor
-      ));
+      await axios.post(`${API_BASE_URL}/admin/tutors/${tutorId}/reject`, { reason });
       toast.success('Tutor application rejected');
       setDialogOpen(false);
+      fetchTutors();
     } catch (error) {
-      toast.error('Failed to reject tutor');
+      toast.error(error.response?.data?.message || 'Failed to reject tutor');
     }
   };
 
@@ -260,7 +184,7 @@ const TutorVerification = () => {
       field: 'hourlyRate',
       headerName: 'Rate/Hour',
       width: 100,
-      renderCell: (params) => `$${params.value}`,
+      renderCell: (params) => `ETB ${params.value}`,
     },
     {
       field: 'status',
@@ -279,8 +203,6 @@ const TutorVerification = () => {
       field: 'appliedDate',
       headerName: 'Applied Date',
       width: 120,
-      type: 'date',
-      valueGetter: (params) => new Date(params.value),
     },
     {
       field: 'actions',
@@ -306,6 +228,16 @@ const TutorVerification = () => {
       {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
     </div>
   );
+
+  if (error) {
+    return (
+      <Box>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box>
@@ -354,7 +286,6 @@ const TutorVerification = () => {
             <Box>
               <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
                 <Tab label="Profile Information" />
-                <Tab label="Documents" />
                 <Tab label="Performance" />
               </Tabs>
 
@@ -371,7 +302,7 @@ const TutorVerification = () => {
                       <Typography variant="body2" color="text.secondary">
                         {selectedTutor.education}
                       </Typography>
-                      {selectedTutor.rating && (
+                      {selectedTutor.rating > 0 && (
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mt: 1 }}>
                           <Rating value={selectedTutor.rating} readOnly size="small" />
                           <Typography variant="body2" sx={{ ml: 1 }}>
@@ -405,15 +336,6 @@ const TutorVerification = () => {
                       <Grid item xs={12} md={6}>
                         <TextField
                           fullWidth
-                          label="Location"
-                          value={selectedTutor.location}
-                          InputProps={{ readOnly: true }}
-                          InputLabelProps={{ shrink: true }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <TextField
-                          fullWidth
                           label="Experience"
                           value={selectedTutor.experience}
                           InputProps={{ readOnly: true }}
@@ -424,16 +346,7 @@ const TutorVerification = () => {
                         <TextField
                           fullWidth
                           label="Hourly Rate"
-                          value={`$${selectedTutor.hourlyRate}`}
-                          InputProps={{ readOnly: true }}
-                          InputLabelProps={{ shrink: true }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <TextField
-                          fullWidth
-                          label="Teaching Mode"
-                          value={selectedTutor.teachingMode}
+                          value={`ETB ${selectedTutor.hourlyRate}`}
                           InputProps={{ readOnly: true }}
                           InputLabelProps={{ shrink: true }}
                         />
@@ -463,60 +376,26 @@ const TutorVerification = () => {
                           ))}
                         </Box>
                       </Grid>
-                      <Grid item xs={12}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Languages
-                        </Typography>
-                        <Box>
-                          {selectedTutor.languages.map((language, index) => (
-                            <Chip
-                              key={index}
-                              label={language}
-                              variant="outlined"
-                              sx={{ mr: 1, mb: 1 }}
-                            />
-                          ))}
-                        </Box>
-                      </Grid>
+                      {selectedTutor.rejectionReason && (
+                        <Grid item xs={12}>
+                          <Alert severity="error">
+                            <Typography variant="subtitle2">Rejection Reason:</Typography>
+                            <Typography variant="body2">{selectedTutor.rejectionReason}</Typography>
+                          </Alert>
+                        </Grid>
+                      )}
                     </Grid>
                   </Grid>
                 </Grid>
               </TabPanel>
 
               <TabPanel value={tabValue} index={1}>
-                <Typography variant="h6" gutterBottom>
-                  Submitted Documents
-                </Typography>
-                <List>
-                  {selectedTutor.documents.map((doc, index) => (
-                    <ListItem key={index} divider>
-                      <ListItemIcon>
-                        <AttachFile />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={doc.name}
-                        secondary={`Type: ${doc.type.toUpperCase()}`}
-                      />
-                      <Chip
-                        label={doc.verified ? 'Verified' : 'Pending'}
-                        color={doc.verified ? 'success' : 'warning'}
-                        size="small"
-                      />
-                      <Button size="small" sx={{ ml: 1 }}>
-                        View
-                      </Button>
-                    </ListItem>
-                  ))}
-                </List>
-              </TabPanel>
-
-              <TabPanel value={tabValue} index={2}>
                 {selectedTutor.status === 'approved' ? (
                   <Grid container spacing={3}>
                     <Grid item xs={12} md={4}>
                       <Paper sx={{ p: 2, textAlign: 'center' }}>
                         <Typography variant="h4" color="primary">
-                          {selectedTutor.rating || 'N/A'}
+                          {selectedTutor.rating > 0 ? selectedTutor.rating.toFixed(1) : 'N/A'}
                         </Typography>
                         <Typography variant="body2">Average Rating</Typography>
                       </Paper>
@@ -532,7 +411,7 @@ const TutorVerification = () => {
                     <Grid item xs={12} md={4}>
                       <Paper sx={{ p: 2, textAlign: 'center' }}>
                         <Typography variant="h4" color="primary">
-                          ${((selectedTutor.totalSessions || 0) * selectedTutor.hourlyRate).toLocaleString()}
+                          ETB {((selectedTutor.totalSessions || 0) * selectedTutor.hourlyRate).toLocaleString()}
                         </Typography>
                         <Typography variant="body2">Total Earnings</Typography>
                       </Paper>
@@ -554,12 +433,7 @@ const TutorVerification = () => {
             <>
               <Button
                 color="error"
-                onClick={() => {
-                  const reason = prompt('Please provide a reason for rejection:');
-                  if (reason) {
-                    handleReject(selectedTutor.id, reason);
-                  }
-                }}
+                onClick={() => handleReject(selectedTutor.id)}
                 startIcon={<Cancel />}
               >
                 Reject

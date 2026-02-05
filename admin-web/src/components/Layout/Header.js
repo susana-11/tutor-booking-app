@@ -9,6 +9,7 @@ import {
   Menu,
   MenuItem,
   Divider,
+  Badge,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -16,7 +17,6 @@ import {
   Logout,
   Settings,
   Notifications,
-  Badge,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 

@@ -51,18 +51,21 @@ class NotificationService {
   // Get unread count
   Future<int> getUnreadCount() async {
     try {
+      print('📊 Fetching unread count from server...');
       final response = await _apiService.get('/notifications/unread-count');
       
       if (response.success && response.data != null) {
         final data = response.data as Map<String, dynamic>;
         _unreadCount = data['count'] ?? 0;
+        print('✅ Unread count updated: $_unreadCount');
         _notificationCountController.add(_unreadCount);
         return _unreadCount;
       }
       
+      print('❌ Failed to get unread count');
       return 0;
     } catch (e) {
-      print('Error getting unread count: $e');
+      print('❌ Error getting unread count: $e');
       return 0;
     }
   }
@@ -75,21 +78,25 @@ class NotificationService {
   // Mark notification as read
   Future<ApiResponse<void>> markAsRead(String notificationId) async {
     try {
+      print('📧 Marking notification as read: $notificationId');
+      print('📊 Current unread count: $_unreadCount');
+      
       final response = await _apiService.put<void>(
         '/notifications/$notificationId/read',
         data: {},
       );
       
       if (response.success) {
-        // Decrease unread count
-        if (_unreadCount > 0) {
-          _unreadCount--;
-          _notificationCountController.add(_unreadCount);
-        }
+        print('✅ Notification marked as read successfully');
+        // Don't decrement locally - let refreshUnreadCount handle it
+        // This ensures we get the accurate count from server
+      } else {
+        print('❌ Failed to mark as read: ${response.error}');
       }
       
       return response;
     } catch (e) {
+      print('❌ Error marking as read: $e');
       return ApiResponse.error('Failed to mark notification as read: $e');
     }
   }
