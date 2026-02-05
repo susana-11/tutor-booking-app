@@ -323,3 +323,138 @@ exports.getTutorDashboard = async (req, res) => {
 };
 
 module.exports = exports;
+
+
+// Get tutor earnings analytics
+exports.getTutorEarningsAnalytics = async (req, res) => {
+  try {
+    const tutorId = req.user.userId;
+
+    // Get tutor profile
+    const tutorProfile = await TutorProfile.findOne({ userId: tutorId });
+    if (!tutorProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tutor profile not found'
+      });
+    }
+
+    // Get all completed bookings
+    const completedBookings = await Booking.find({
+      tutorId,
+      status: 'completed'
+    }).populate('studentId', 'firstName lastName');
+
+    // Get reviews for rating
+    const reviews = await Review.find({ tutorId: tutorProfile._id });
+    const totalReviews = reviews.length;
+    const averageRating = totalReviews > 0
+      ? reviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews
+      : 0;
+
+    // Calculate response rate (confirmed vs total requests)
+    const totalRequests = await Booking.countDocuments({ tutorId });
+    const confirmedBookings = await Booking.countDocuments({ 
+      tutorId, 
+      status: { $in: ['confirmed', 'completed'] } 
+    });
+    const responseRate = totalRequests > 0 
+      ? ((confirmedBookings / totalRequests) * 100).toFixed(0)
+      : 0;
+
+    // Calculate completion rate
+    const completionRate = confirmedBookings > 0
+      ? ((completedBookings.length / confirmedBookings) * 100).toFixed(0)
+      : 0;
+
+    // Calculate repeat students
+    const studentBookingCounts = {};
+    completedBookings.forEach(booking => {
+      const studentId = booking.studentId?._id?.toString();
+      if (studentId) {
+        studentBookingCounts[studentId] = (studentBookingCounts[studentId] || 0) + 1;
+      }
+    });
+    const repeatStudents = Object.values(studentBookingCounts).filter(count => count > 1).length;
+    const totalUniqueStudents = Object.keys(studentBookingCounts).length;
+    const repeatStudentRate = totalUniqueStudents > 0
+      ? ((repeatStudents / totalUniqueStudents) * 100).toFixed(0)
+      : 0;
+
+    // Subject performance
+    const subjectPerformance = {};
+    completedBookings.forEach(booking => {
+      const subject = booking.subject?.name || 'Other';
+      if (!subjectPerformance[subject]) {
+        subjectPerformance[subject] = {
+          sessions: 0,
+          earnings: 0
+        };
+      }
+      subjectPerformance[subject].sessions += 1;
+      subjectPerformance[subject].earnings += booking.tutorEarnings || 0;
+    });
+
+    const subjectStats = Object.entries(subjectPerformance).map(([subject, data]) => ({
+      subject,
+      sessions: data.sessions,
+      earnings: data.earnings
+    })).sort((a, b) => b.sessions - a.sessions);
+
+    // Monthly earnings trend (last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const monthlyBookings = await Booking.find({
+      tutorId,
+      status: 'completed',
+      completedAt: { $gte: sixMonthsAgo }
+    });
+
+    const monthlyEarnings = {};
+    monthlyBookings.forEach(booking => {
+      const month = new Date(booking.completedAt).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short' 
+      });
+      if (!monthlyEarnings[month]) {
+        monthlyEarnings[month] = {
+          earnings: 0,
+          sessions: 0
+        };
+      }
+      monthlyEarnings[month].earnings += booking.tutorEarnings || 0;
+      monthlyEarnings[month].sessions += 1;
+    });
+
+    const earningsTrend = Object.entries(monthlyEarnings).map(([month, data]) => ({
+      month,
+      earnings: data.earnings,
+      sessions: data.sessions
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        metrics: {
+          averageRating: averageRating.toFixed(1),
+          totalReviews,
+          responseRate: `${responseRate}%`,
+          completionRate: `${completionRate}%`,
+          repeatStudentRate: `${repeatStudentRate}%`,
+          totalSessions: completedBookings.length,
+          totalStudents: totalUniqueStudents
+        },
+        subjectPerformance: subjectStats,
+        earningsTrend
+      }
+    });
+  } catch (error) {
+    console.error('Get tutor earnings analytics error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to load earnings analytics',
+      error: error.message
+    });
+  }
+};

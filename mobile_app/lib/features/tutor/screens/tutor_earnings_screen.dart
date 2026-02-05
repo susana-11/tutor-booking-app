@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/withdrawal_service.dart';
 import '../../../core/services/payment_service.dart';
+import '../../../core/services/earnings_analytics_service.dart';
 
 class TutorEarningsScreen extends StatefulWidget {
   const TutorEarningsScreen({super.key});
@@ -27,11 +28,14 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
 
   final WithdrawalService _withdrawalService = WithdrawalService();
   final PaymentService _paymentService = PaymentService();
+  final EarningsAnalyticsService _analyticsService = EarningsAnalyticsService();
 
   Map<String, dynamic>? _balance;
   List<dynamic> _transactions = [];
+  Map<String, dynamic>? _analytics;
   bool _isLoadingBalance = true;
   bool _isLoadingTransactions = true;
+  bool _isLoadingAnalytics = true;
 
   @override
   void initState() {
@@ -39,6 +43,7 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
     _tabController = TabController(length: 3, vsync: this);
     _loadBalance();
     _loadTransactions();
+    _loadAnalytics();
   }
 
   Future<void> _loadBalance() async {
@@ -74,6 +79,24 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
     } catch (e) {
       print('Load transactions error: $e');
       setState(() => _isLoadingTransactions = false);
+    }
+  }
+
+  Future<void> _loadAnalytics() async {
+    setState(() => _isLoadingAnalytics = true);
+    try {
+      final result = await _analyticsService.getEarningsAnalytics();
+      if (result['success'] == true && mounted) {
+        setState(() {
+          _analytics = result['data'];
+          _isLoadingAnalytics = false;
+        });
+      } else {
+        setState(() => _isLoadingAnalytics = false);
+      }
+    } catch (e) {
+      print('Load analytics error: $e');
+      setState(() => _isLoadingAnalytics = false);
     }
   }
 
@@ -464,6 +487,45 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
   }
 
   Widget _buildAnalyticsTab(bool isDark) {
+    if (_isLoadingAnalytics) {
+      return Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(
+            isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+          ),
+        ),
+      );
+    }
+
+    if (_analytics == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.analytics_outlined,
+              size: 64,
+              color: isDark 
+                  ? const Color(0xFF6B7FA8).withOpacity(0.5)
+                  : const Color(0xFF0F3460).withOpacity(0.3),
+            ),
+            const SizedBox(height: AppTheme.spacingLG),
+            Text(
+              'No analytics data available',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : const Color(0xFF0F3460),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final metrics = _analytics!['metrics'] ?? {};
+    final subjectPerformance = (_analytics!['subjectPerformance'] as List?) ?? [];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppTheme.spacingLG),
       child: Column(
@@ -504,72 +566,110 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
             padding: const EdgeInsets.all(AppTheme.spacingLG),
             child: Column(
               children: [
-                _buildMetricRow('Average Rating', '4.8/5', Icons.star_rounded, Colors.amber, isDark),
+                _buildMetricRow('Average Rating', '${metrics['averageRating'] ?? '0.0'}/5', 
+                    Icons.star_rounded, Colors.amber, isDark),
                 const Divider(),
-                _buildMetricRow('Response Rate', '95%', Icons.reply_rounded, 
-                    isDark ? const Color(0xFF7FA87F) : Colors.green, isDark),
+                _buildMetricRow('Response Rate', metrics['responseRate'] ?? '0%', 
+                    Icons.reply_rounded, isDark ? const Color(0xFF7FA87F) : Colors.green, isDark),
                 const Divider(),
-                _buildMetricRow('Completion Rate', '98%', Icons.check_circle_rounded, 
-                    isDark ? const Color(0xFF6B7FA8) : Colors.blue, isDark),
+                _buildMetricRow('Completion Rate', metrics['completionRate'] ?? '0%', 
+                    Icons.check_circle_rounded, isDark ? const Color(0xFF6B7FA8) : Colors.blue, isDark),
                 const Divider(),
-                _buildMetricRow('Repeat Students', '67%', Icons.refresh_rounded, 
-                    isDark ? const Color(0xFF8B7FA8) : Colors.purple, isDark),
+                _buildMetricRow('Repeat Students', metrics['repeatStudentRate'] ?? '0%', 
+                    Icons.refresh_rounded, isDark ? const Color(0xFF8B7FA8) : Colors.purple, isDark),
               ],
             ),
           ),
           
           const SizedBox(height: AppTheme.spacingXL),
           
-          // Subject Performance (Placeholder)
-          Text(
-            'Subject Performance',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : const Color(0xFF0F3460),
-            ),
-          ),
-          
-          const SizedBox(height: AppTheme.spacingLG),
-          
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark
-                    ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
-                    : [Colors.white, const Color(0xFFF5F7FA)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: isDark
-                      ? Colors.black.withOpacity(0.3)
-                      : Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(AppTheme.spacingXL),
-            child: Center(
-              child: Text(
-                'Subject performance analytics coming soon',
-                style: TextStyle(
-                  color: isDark 
-                      ? Colors.white.withOpacity(0.6)
-                      : const Color(0xFF6B7FA8),
-                ),
+          // Subject Performance
+          if (subjectPerformance.isNotEmpty) ...[
+            Text(
+              'Subject Performance',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : const Color(0xFF0F3460),
               ),
             ),
-          ),
+            
+            const SizedBox(height: AppTheme.spacingLG),
+            
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
+                      : [Colors.white, const Color(0xFFF5F7FA)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark
+                        ? Colors.black.withOpacity(0.3)
+                        : Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(AppTheme.spacingLG),
+              child: Column(
+                children: subjectPerformance.take(5).map<Widget>((subject) {
+                  final subjectName = subject['subject'] ?? 'Unknown';
+                  final sessions = subject['sessions'] ?? 0;
+                  final earnings = (subject['earnings'] ?? 0).toDouble();
+                  
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingSM),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                subjectName,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white : const Color(0xFF0F3460),
+                                ),
+                              ),
+                              Text(
+                                '$sessions sessions',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark 
+                                      ? Colors.white.withOpacity(0.6)
+                                      : const Color(0xFF6B7FA8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          'ETB ${earnings.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? const Color(0xFF7FA87F) : Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            
+            const SizedBox(height: AppTheme.spacingXL),
+          ],
           
-          const SizedBox(height: AppTheme.spacingXL),
-          
-          // Monthly Trends
+          // Summary Stats
           Text(
-            'Monthly Trends',
+            'Summary',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -602,36 +702,38 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
             padding: const EdgeInsets.all(AppTheme.spacingLG),
             child: Column(
               children: [
-                Text(
-                  'Earnings Growth',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : const Color(0xFF0F3460),
-                  ),
-                ),
-                const SizedBox(height: AppTheme.spacingLG),
-                // Placeholder for chart
-                Container(
-                  height: 200,
-                  decoration: BoxDecoration(
-                    color: isDark 
-                        ? const Color(0xFF0F3460).withOpacity(0.3)
-                        : const Color(0xFFECEFF4),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'Chart will be implemented here',
-                      style: TextStyle(
-                        color: isDark 
-                            ? Colors.white.withOpacity(0.5)
-                            : const Color(0xFF6B7FA8),
-                      ),
-                    ),
-                  ),
-                ),
+                _buildSummaryRow('Total Sessions', '${metrics['totalSessions'] ?? 0}', isDark),
+                const Divider(),
+                _buildSummaryRow('Total Students', '${metrics['totalStudents'] ?? 0}', isDark),
+                const Divider(),
+                _buildSummaryRow('Total Reviews', '${metrics['totalReviews'] ?? 0}', isDark),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingSM),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white : const Color(0xFF0F3460),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+              fontSize: 16,
             ),
           ),
         ],

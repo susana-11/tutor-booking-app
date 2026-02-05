@@ -9,4 +9,7 @@ router.get('/student', authenticate, authorize('student'), dashboardController.g
 // Tutor dashboard
 router.get('/tutor', authenticate, authorize('tutor'), dashboardController.getTutorDashboard);
 
+// Tutor earnings analytics
+router.get('/tutor/earnings-analytics', authenticate, authorize('tutor'), dashboardController.getTutorEarningsAnalytics);
+
 module.exports = router;
