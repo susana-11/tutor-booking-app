@@ -17,61 +17,71 @@ import {
   ListItem,
   ListItemText,
   ListItemAvatar,
+  CircularProgress,
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import { Visibility, CheckCircle, Cancel, Message } from '@mui/icons-material';
+import { Visibility, CheckCircle, Cancel, Message, Send } from '@mui/icons-material';
+import axios from 'axios';
 import toast from 'react-hot-toast';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://tutor-app-backend-wtru.onrender.com/api';
 
 const DisputeManagement = () => {
   const [disputes, setDisputes] = useState([]);
   const [selectedDispute, setSelectedDispute] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [resolution, setResolution] = useState('');
+  const [newMessage, setNewMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState({ status: 'all', priority: 'all' });
 
   useEffect(() => {
-    // Mock data
-    setDisputes([
-      {
-        id: 1,
-        bookingId: 'BK001',
-        student: 'John Doe',
-        tutor: 'Dr. Sarah Johnson',
-        subject: 'Mathematics',
-        issue: 'Tutor did not show up for the session',
-        status: 'open',
-        priority: 'high',
-        createdDate: '2026-01-28',
-        amount: 45,
-        description: 'The tutor was supposed to join the session at 10 AM but never showed up. I waited for 30 minutes.',
-        messages: [
-          {
-            sender: 'John Doe',
-            message: 'The tutor did not show up for our scheduled session.',
-            timestamp: '2026-01-28 10:30 AM',
-          },
-          {
-            sender: 'Dr. Sarah Johnson',
-            message: 'I apologize, I had a family emergency. Can we reschedule?',
-            timestamp: '2026-01-28 2:00 PM',
-          },
-        ],
-      },
-      {
-        id: 2,
-        bookingId: 'BK002',
-        student: 'Jane Smith',
-        tutor: 'Prof. Michael Chen',
-        subject: 'Physics',
-        issue: 'Quality of teaching was poor',
-        status: 'in_progress',
-        priority: 'medium',
-        createdDate: '2026-01-25',
-        amount: 55,
-        description: 'The tutor seemed unprepared and could not answer basic questions.',
-        messages: [],
-      },
-    ]);
-  }, []);
+    fetchDisputes();
+  }, [filter]);
+
+  const fetchDisputes = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get(`${API_BASE_URL}/admin/disputes`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        params: filter
+      });
+
+      if (response.data.success) {
+        setDisputes(response.data.data.disputes.map(dispute => ({
+          id: dispute._id,
+          bookingId: dispute.bookingId?._id || 'N/A',
+          student: dispute.studentId ? `${dispute.studentId.firstName} ${dispute.studentId.lastName}` : 'Unknown',
+          tutor: dispute.tutorId ? `${dispute.tutorId.firstName} ${dispute.tutorId.lastName}` : 'Unknown',
+          subject: dispute.bookingId?.subject?.name || 'N/A',
+          issue: dispute.issue,
+          status: dispute.status,
+          priority: dispute.priority,
+          createdDate: new Date(dispute.createdAt).toLocaleDateString(),
+          amount: dispute.amount,
+          description: dispute.description,
+          messages: dispute.messages || [],
+          resolution: dispute.resolution,
+          raisedBy: dispute.raisedBy,
+          studentEmail: dispute.studentId?.email,
+          tutorEmail: dispute.tutorId?.email,
+        })));
+      }
+    } catch (err) {
+      console.error('Failed to fetch disputes:', err);
+      setError(err.response?.data?.message || 'Failed to load disputes');
+      toast.error('Failed to load disputes');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -94,21 +104,57 @@ const DisputeManagement = () => {
 
   const handleResolve = async (disputeId, resolutionText) => {
     try {
-      setDisputes(disputes.map(dispute =>
-        dispute.id === disputeId
-          ? { ...dispute, status: 'resolved', resolution: resolutionText }
-          : dispute
-      ));
+      const token = localStorage.getItem('adminToken');
+      await axios.post(
+        `${API_BASE_URL}/admin/disputes/${disputeId}/resolve`,
+        { resolution: resolutionText },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      
       toast.success('Dispute resolved successfully');
       setDialogOpen(false);
       setResolution('');
+      fetchDisputes();
     } catch (error) {
-      toast.error('Failed to resolve dispute');
+      toast.error(error.response?.data?.message || 'Failed to resolve dispute');
+    }
+  };
+
+  const handleSendMessage = async (disputeId) => {
+    if (!newMessage.trim()) return;
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      await axios.post(
+        `${API_BASE_URL}/admin/disputes/${disputeId}/messages`,
+        { message: newMessage },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      
+      toast.success('Message sent successfully');
+      setNewMessage('');
+      
+      // Refresh dispute details
+      const response = await axios.get(
+        `${API_BASE_URL}/admin/disputes/${disputeId}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      
+      if (response.data.success) {
+        const dispute = response.data.data.dispute;
+        setSelectedDispute({
+          ...selectedDispute,
+          messages: dispute.messages,
+          status: dispute.status,
+        });
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to send message');
     }
   };
 
   const columns = [
-    { field: 'id', headerName: 'ID', width: 70 },
+    { field: 'id', headerName: 'ID', width: 100 },
     { field: 'bookingId', headerName: 'Booking ID', width: 120 },
     { field: 'student', headerName: 'Student', width: 150 },
     { field: 'tutor', headerName: 'Tutor', width: 150 },
@@ -143,7 +189,7 @@ const DisputeManagement = () => {
       field: 'amount',
       headerName: 'Amount',
       width: 100,
-      renderCell: (params) => `$${params.value}`,
+      renderCell: (params) => `ETB ${params.value}`,
     },
     {
       field: 'actions',
@@ -164,11 +210,52 @@ const DisputeManagement = () => {
     },
   ];
 
+  if (error) {
+    return (
+      <Box>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box>
-      <Typography variant="h4" fontWeight="bold" sx={{ mb: 3 }}>
-        Dispute Management
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" fontWeight="bold">
+          Dispute Management
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <FormControl sx={{ minWidth: 120 }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={filter.status}
+              label="Status"
+              onChange={(e) => setFilter({ ...filter, status: e.target.value })}
+            >
+              <MenuItem value="all">All Status</MenuItem>
+              <MenuItem value="open">Open</MenuItem>
+              <MenuItem value="in_progress">In Progress</MenuItem>
+              <MenuItem value="resolved">Resolved</MenuItem>
+              <MenuItem value="closed">Closed</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl sx={{ minWidth: 120 }}>
+            <InputLabel>Priority</InputLabel>
+            <Select
+              value={filter.priority}
+              label="Priority"
+              onChange={(e) => setFilter({ ...filter, priority: e.target.value })}
+            >
+              <MenuItem value="all">All Priority</MenuItem>
+              <MenuItem value="high">High</MenuItem>
+              <MenuItem value="medium">Medium</MenuItem>
+              <MenuItem value="low">Low</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+      </Box>
 
       <Card>
         <Box sx={{ height: 600, width: '100%' }}>
@@ -178,6 +265,13 @@ const DisputeManagement = () => {
             pageSize={10}
             rowsPerPageOptions={[10, 25, 50]}
             disableSelectionOnClick
+            loading={loading}
+            sx={{
+              border: 'none',
+              '& .MuiDataGrid-cell': {
+                borderBottom: '1px solid #f0f0f0',
+              },
+            }}
           />
         </Box>
       </Card>
@@ -185,6 +279,12 @@ const DisputeManagement = () => {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           Dispute Details - {selectedDispute?.bookingId}
+          <Chip
+            label={selectedDispute?.status?.replace('_', ' ')}
+            color={getStatusColor(selectedDispute?.status)}
+            size="small"
+            sx={{ ml: 2 }}
+          />
         </DialogTitle>
         <DialogContent>
           {selectedDispute && (
@@ -203,6 +303,24 @@ const DisputeManagement = () => {
                   fullWidth
                   label="Tutor"
                   value={selectedDispute.tutor}
+                  InputProps={{ readOnly: true }}
+                  margin="normal"
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Raised By"
+                  value={selectedDispute.raisedBy}
+                  InputProps={{ readOnly: true }}
+                  margin="normal"
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Amount"
+                  value={`ETB ${selectedDispute.amount}`}
                   InputProps={{ readOnly: true }}
                   margin="normal"
                 />
@@ -233,21 +351,28 @@ const DisputeManagement = () => {
                   <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
                     Messages
                   </Typography>
-                  <List>
+                  <List sx={{ maxHeight: 300, overflow: 'auto', bgcolor: 'background.paper', borderRadius: 1 }}>
                     {selectedDispute.messages.map((msg, index) => (
-                      <ListItem key={index}>
+                      <ListItem key={index} alignItems="flex-start">
                         <ListItemAvatar>
-                          <Avatar>{msg.sender.charAt(0)}</Avatar>
+                          <Avatar>{msg.sender?.firstName?.charAt(0) || 'U'}</Avatar>
                         </ListItemAvatar>
                         <ListItemText
-                          primary={msg.sender}
-                          secondary={
-                            <>
-                              <Typography variant="body2">{msg.message}</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {msg.timestamp}
+                          primary={
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <Typography variant="subtitle2">
+                                {msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : 'Unknown'}
+                                <Chip label={msg.senderRole} size="small" sx={{ ml: 1 }} />
                               </Typography>
-                            </>
+                              <Typography variant="caption" color="text.secondary">
+                                {new Date(msg.timestamp).toLocaleString()}
+                              </Typography>
+                            </Box>
+                          }
+                          secondary={
+                            <Typography variant="body2" sx={{ mt: 0.5 }}>
+                              {msg.message}
+                            </Typography>
                           }
                         />
                       </ListItem>
@@ -256,7 +381,31 @@ const DisputeManagement = () => {
                 </Grid>
               )}
 
-              {selectedDispute.status !== 'resolved' && (
+              {selectedDispute.status !== 'resolved' && selectedDispute.status !== 'closed' && (
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 2 }} />
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      label="Add Message"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Type your message..."
+                      size="small"
+                    />
+                    <Button
+                      variant="outlined"
+                      startIcon={<Send />}
+                      onClick={() => handleSendMessage(selectedDispute.id)}
+                      disabled={!newMessage.trim()}
+                    >
+                      Send
+                    </Button>
+                  </Box>
+                </Grid>
+              )}
+
+              {selectedDispute.status !== 'resolved' && selectedDispute.status !== 'closed' && (
                 <Grid item xs={12}>
                   <Divider sx={{ my: 2 }} />
                   <TextField
@@ -270,32 +419,34 @@ const DisputeManagement = () => {
                   />
                 </Grid>
               )}
+
+              {selectedDispute.resolution && (
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 2 }} />
+                  <TextField
+                    fullWidth
+                    label="Resolution"
+                    value={selectedDispute.resolution}
+                    multiline
+                    rows={3}
+                    InputProps={{ readOnly: true }}
+                  />
+                </Grid>
+              )}
             </Grid>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Close</Button>
-          {selectedDispute?.status !== 'resolved' && (
-            <>
-              <Button
-                color="error"
-                startIcon={<Cancel />}
-                onClick={() => {
-                  // Handle dispute rejection
-                  toast.info('Dispute rejection functionality to be implemented');
-                }}
-              >
-                Reject
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<CheckCircle />}
-                onClick={() => handleResolve(selectedDispute.id, resolution)}
-                disabled={!resolution.trim()}
-              >
-                Resolve
-              </Button>
-            </>
+          {selectedDispute?.status !== 'resolved' && selectedDispute?.status !== 'closed' && (
+            <Button
+              variant="contained"
+              startIcon={<CheckCircle />}
+              onClick={() => handleResolve(selectedDispute.id, resolution)}
+              disabled={!resolution.trim()}
+            >
+              Resolve
+            </Button>
           )}
         </DialogActions>
       </Dialog>

@@ -32,4 +32,11 @@ router.get('/transactions', adminController.getAllTransactions);
 // Analytics
 router.get('/analytics', adminController.getAnalytics);
 
+// Dispute management
+router.get('/disputes', adminController.getAllDisputes);
+router.get('/disputes/:disputeId', adminController.getDisputeById);
+router.put('/disputes/:disputeId/status', adminController.updateDisputeStatus);
+router.post('/disputes/:disputeId/resolve', adminController.resolveDispute);
+router.post('/disputes/:disputeId/messages', adminController.addDisputeMessage);
+
 module.exports = router;

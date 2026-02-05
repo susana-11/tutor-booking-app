@@ -651,3 +651,218 @@ exports.getAnalytics = async (req, res) => {
     });
   }
 };
+
+// Get all disputes
+exports.getAllDisputes = async (req, res) => {
+  try {
+    const Dispute = require('../models/Dispute');
+    const { status, priority, page = 1, limit = 20 } = req.query;
+
+    let filter = {};
+    if (status && status !== 'all') filter.status = status;
+    if (priority && priority !== 'all') filter.priority = priority;
+
+    const disputes = await Dispute.find(filter)
+      .populate('studentId', 'firstName lastName email phone')
+      .populate('tutorId', 'firstName lastName email phone')
+      .populate('bookingId', 'sessionDate subject.name totalAmount')
+      .populate('messages.sender', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Dispute.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: {
+        disputes,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get all disputes error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
+
+// Get dispute by ID
+exports.getDisputeById = async (req, res) => {
+  try {
+    const Dispute = require('../models/Dispute');
+    const { disputeId } = req.params;
+
+    const dispute = await Dispute.findById(disputeId)
+      .populate('studentId', 'firstName lastName email phone')
+      .populate('tutorId', 'firstName lastName email phone')
+      .populate('bookingId', 'sessionDate subject.name totalAmount')
+      .populate('messages.sender', 'firstName lastName')
+      .populate('resolvedBy', 'firstName lastName');
+
+    if (!dispute) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dispute not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { dispute }
+    });
+  } catch (error) {
+    console.error('Get dispute error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
+
+// Update dispute status
+exports.updateDisputeStatus = async (req, res) => {
+  try {
+    const Dispute = require('../models/Dispute');
+    const { disputeId } = req.params;
+    const { status, priority } = req.body;
+
+    const updateData = {};
+    if (status) updateData.status = status;
+    if (priority) updateData.priority = priority;
+
+    const dispute = await Dispute.findByIdAndUpdate(
+      disputeId,
+      updateData,
+      { new: true }
+    ).populate('studentId', 'firstName lastName email')
+     .populate('tutorId', 'firstName lastName email')
+     .populate('bookingId', 'sessionDate subject.name');
+
+    if (!dispute) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dispute not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Dispute updated successfully',
+      data: { dispute }
+    });
+  } catch (error) {
+    console.error('Update dispute error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
+
+// Resolve dispute
+exports.resolveDispute = async (req, res) => {
+  try {
+    const Dispute = require('../models/Dispute');
+    const { disputeId } = req.params;
+    const { resolution } = req.body;
+
+    if (!resolution || !resolution.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Resolution text is required'
+      });
+    }
+
+    const dispute = await Dispute.findByIdAndUpdate(
+      disputeId,
+      {
+        status: 'resolved',
+        resolution: resolution.trim(),
+        resolvedBy: req.user.userId,
+        resolvedAt: new Date()
+      },
+      { new: true }
+    ).populate('studentId', 'firstName lastName email')
+     .populate('tutorId', 'firstName lastName email')
+     .populate('bookingId', 'sessionDate subject.name')
+     .populate('resolvedBy', 'firstName lastName');
+
+    if (!dispute) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dispute not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Dispute resolved successfully',
+      data: { dispute }
+    });
+  } catch (error) {
+    console.error('Resolve dispute error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
+
+// Add message to dispute
+exports.addDisputeMessage = async (req, res) => {
+  try {
+    const Dispute = require('../models/Dispute');
+    const { disputeId } = req.params;
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Message text is required'
+      });
+    }
+
+    const dispute = await Dispute.findById(disputeId);
+    if (!dispute) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dispute not found'
+      });
+    }
+
+    dispute.messages.push({
+      sender: req.user.userId,
+      senderRole: 'admin',
+      message: message.trim(),
+      timestamp: new Date()
+    });
+
+    // Update status to in_progress if it was open
+    if (dispute.status === 'open') {
+      dispute.status = 'in_progress';
+    }
+
+    await dispute.save();
+    await dispute.populate('messages.sender', 'firstName lastName');
+
+    res.json({
+      success: true,
+      message: 'Message added successfully',
+      data: { dispute }
+    });
+  } catch (error) {
+    console.error('Add dispute message error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
