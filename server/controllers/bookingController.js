@@ -553,6 +553,15 @@ exports.cancelBooking = async (req, res) => {
       const notifyUserId = isStudent ? booking.tutorId._id : booking.studentId._id;
       const cancelledByUser = await User.findById(userId).select('firstName lastName');
       const cancelledByName = cancelledByUser ? `${cancelledByUser.firstName} ${cancelledByUser.lastName}` : 'User';
+      const cancelledByRole = isStudent ? 'student' : 'tutor';
+
+      console.log('📧 Sending cancellation notification:', {
+        from: cancelledByName,
+        fromRole: cancelledByRole,
+        to: notifyUserId.toString(),
+        toRole: isStudent ? 'tutor' : 'student',
+        bookingId: booking._id.toString()
+      });
 
       await notificationService.notifyBookingCancelled({
         userId: notifyUserId,
@@ -562,8 +571,10 @@ exports.cancelBooking = async (req, res) => {
         reason,
         bookingId: booking._id
       });
+
+      console.log('✅ Cancellation notification sent successfully');
     } catch (notifError) {
-      console.error('Failed to send cancellation notification:', notifError);
+      console.error('❌ Failed to send cancellation notification:', notifError);
       // Don't fail the cancellation if notification fails
     }
 
@@ -997,6 +1008,7 @@ exports.requestReschedule = async (req, res) => {
         : `${booking.tutorId.firstName} ${booking.tutorId.lastName}`;
       
       const notifyUserId = isStudent ? booking.tutorId._id : booking.studentId._id;
+      const requestedByRole = isStudent ? 'student' : 'tutor';
       
       const formattedNewDate = new Date(newDate).toLocaleDateString('en-US', {
         month: 'short',
@@ -1009,6 +1021,16 @@ exports.requestReschedule = async (req, res) => {
       if (priceAdjustment !== 0) {
         notificationBody += `. Price adjustment: ETB ${Math.abs(priceAdjustment).toFixed(2)} ${priceAdjustment > 0 ? 'additional' : 'refund'}`;
       }
+
+      console.log('📧 Sending reschedule request notification:', {
+        from: requestedByName,
+        fromRole: requestedByRole,
+        to: notifyUserId.toString(),
+        toRole: isStudent ? 'tutor' : 'student',
+        bookingId: booking._id.toString(),
+        newDate: formattedNewDate,
+        newTime: `${newStartTime} - ${newEndTime}`
+      });
 
       await notificationService.createNotification({
         userId: notifyUserId,
@@ -1026,8 +1048,10 @@ exports.requestReschedule = async (req, res) => {
         priority: 'high',
         actionUrl: isStudent ? '/tutor/bookings' : '/student/bookings'
       });
+
+      console.log('✅ Reschedule request notification sent successfully');
     } catch (notifError) {
-      console.error('Failed to send reschedule notification:', notifError);
+      console.error('❌ Failed to send reschedule notification:', notifError);
     }
 
     res.json({
@@ -1182,11 +1206,21 @@ exports.respondToRescheduleRequest = async (req, res) => {
         : `${booking.tutorId.firstName} ${booking.tutorId.lastName}`;
       
       const notifyUserId = rescheduleRequest.requestedBy;
+      const responderRole = isStudent ? 'student' : 'tutor';
       
       const formattedDate = new Date(rescheduleRequest.newDate).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric'
+      });
+
+      console.log('📧 Sending reschedule response notification:', {
+        from: responderName,
+        fromRole: responderRole,
+        to: notifyUserId.toString(),
+        response: response,
+        bookingId: booking._id.toString(),
+        newDate: formattedDate
       });
 
       if (response === 'accept') {
@@ -1218,8 +1252,10 @@ exports.respondToRescheduleRequest = async (req, res) => {
           actionUrl: isStudent ? '/tutor/bookings' : '/student/bookings'
         });
       }
+
+      console.log('✅ Reschedule response notification sent successfully');
     } catch (notifError) {
-      console.error('Failed to send reschedule response notification:', notifError);
+      console.error('❌ Failed to send reschedule response notification:', notifError);
     }
 
     res.json({

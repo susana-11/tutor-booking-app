@@ -254,7 +254,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   CustomButton(
                     text: 'Cancel Booking',
                     onPressed: () => _showCancelDialog(),
-                    variant: ButtonVariant.outlined,
+                    type: ButtonType.outline,
                   ),
                 ],
               ),

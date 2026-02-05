@@ -474,6 +474,28 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
       );
     }
 
+    // Debug logging
+    print('🔍 Session Details Tab - Selected Slot Info:');
+    print('  - Has Online: ${_selectedSlot!.hasOnlineSession}');
+    print('  - Has Offline: ${_selectedSlot!.hasOfflineSession}');
+    print('  - Online Rate: ${_selectedSlot!.onlineRate}');
+    print('  - Offline Rate: ${_selectedSlot!.offlineRate}');
+    print('  - Session Types Count: ${_selectedSlot!.sessionTypes.length}');
+    for (var st in _selectedSlot!.sessionTypes) {
+      print('    - Type: ${st.type}, Rate: ${st.hourlyRate}');
+    }
+
+    // Check if session types are empty - use fallback
+    final hasSessionTypes = _selectedSlot!.sessionTypes.isNotEmpty;
+    final bool showOnline = hasSessionTypes ? _selectedSlot!.hasOnlineSession : true;
+    final bool showOffline = hasSessionTypes ? _selectedSlot!.hasOfflineSession : true;
+    final double onlineRateValue = hasSessionTypes ? (_selectedSlot!.onlineRate ?? widget.hourlyRate) : widget.hourlyRate;
+    final double offlineRateValue = hasSessionTypes ? (_selectedSlot!.offlineRate ?? widget.hourlyRate) : widget.hourlyRate;
+
+    if (!hasSessionTypes) {
+      print('⚠️ WARNING: No session types found! Using fallback with base rate: ${widget.hourlyRate}');
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppTheme.spacingLG),
       child: Column(
@@ -489,23 +511,23 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
           
           const SizedBox(height: AppTheme.spacingMD),
           
-          if (_selectedSlot!.hasOnlineSession)
+          if (showOnline)
             _buildSessionTypeCard(
               type: 'online',
               icon: Icons.videocam,
               title: 'Online Session',
               subtitle: 'Video call via the app',
-              price: _selectedSlot!.onlineRate ?? 0,
+              price: onlineRateValue,
               color: Colors.blue,
             ),
           
-          if (_selectedSlot!.hasOfflineSession)
+          if (showOffline)
             _buildSessionTypeCard(
               type: 'offline',
               icon: Icons.location_on,
               title: 'Offline Session',
               subtitle: 'In-person meeting',
-              price: _selectedSlot!.offlineRate ?? 0,
+              price: offlineRateValue,
               color: Colors.green,
             ),
           
@@ -606,32 +628,30 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
             ),
             
             // Travel Distance Info
-            if (_selectedSlot!.sessionTypes.any((st) => st.isOffline)) ...[
-              const SizedBox(height: AppTheme.spacingMD),
-              Container(
-                padding: const EdgeInsets.all(AppTheme.spacingMD),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-                  border: Border.all(color: Colors.orange[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
-                    const SizedBox(width: AppTheme.spacingSM),
-                    Expanded(
-                      child: Text(
-                        'Tutor can travel up to ${_getTravelDistance()} km',
-                        style: TextStyle(
-                          color: Colors.orange[700],
-                          fontSize: 12,
-                        ),
+            const SizedBox(height: AppTheme.spacingMD),
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingMD),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                border: Border.all(color: Colors.orange[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                  const SizedBox(width: AppTheme.spacingSM),
+                  Expanded(
+                    child: Text(
+                      'Tutor can travel up to ${_getTravelDistance()} km',
+                      style: TextStyle(
+                        color: Colors.orange[700],
+                        fontSize: 12,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ],
           
           const SizedBox(height: AppTheme.spacingXL),
@@ -826,6 +846,11 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
   double _getSelectedHourlyRate() {
     if (_selectedSlot == null || _selectedSessionType == null) return widget.hourlyRate;
     
+    // If no session types configured, use base rate
+    if (_selectedSlot!.sessionTypes.isEmpty) {
+      return widget.hourlyRate;
+    }
+    
     if (_selectedSessionType == 'online') {
       return _selectedSlot!.onlineRate ?? widget.hourlyRate;
     } else {
@@ -836,23 +861,33 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
   String _getOfflineSessionLocation() {
     if (_selectedSlot == null) return 'Location not specified';
     
+    // If no session types, return default
+    if (_selectedSlot!.sessionTypes.isEmpty) {
+      return 'To be discussed with tutor';
+    }
+    
     final offlineSession = _selectedSlot!.sessionTypes.firstWhere(
       (st) => st.isOffline,
       orElse: () => SessionTypeInfo(type: 'offline', hourlyRate: 0),
     );
     
-    return offlineSession.meetingLocation ?? 'Location not specified';
+    return offlineSession.meetingLocation ?? 'To be discussed with tutor';
   }
   
   double _getTravelDistance() {
     if (_selectedSlot == null) return 0;
     
+    // If no session types, return default
+    if (_selectedSlot!.sessionTypes.isEmpty) {
+      return 10; // Default 10km
+    }
+    
     final offlineSession = _selectedSlot!.sessionTypes.firstWhere(
       (st) => st.isOffline,
       orElse: () => SessionTypeInfo(type: 'offline', hourlyRate: 0),
     );
     
-    return offlineSession.travelDistance ?? 0;
+    return offlineSession.travelDistance ?? 10;
   }
 
   Widget _buildConfirmationTab() {
@@ -876,6 +911,36 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
             const SizedBox(height: AppTheme.spacingSM),
             Text(
               'Go back to the previous tab to choose your preferred time',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[500],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_selectedSessionType == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: AppTheme.spacingMD),
+            Text(
+              'Please select session type and duration',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingSM),
+            Text(
+              'Go back to Session Details tab to complete your selection',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[500],
               ),
@@ -911,13 +976,21 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
                   _buildSummaryRow('Subject', widget.subject),
                   _buildSummaryRow('Date', _formatDate(_selectedSlot!.date)),
                   _buildSummaryRow('Time', _selectedSlot!.timeSlot.displayTime),
-                  _buildSummaryRow('Duration', '${_selectedSlot!.timeSlot.durationMinutes} minutes'),
+                  _buildSummaryRow('Session Type', _selectedSessionType == 'online' ? 'Online Session' : 'Offline Session'),
+                  _buildSummaryRow('Duration', _selectedDuration == 1.0 ? '1 hour' : _selectedDuration == 1.5 ? '1.5 hours' : '2 hours'),
+                  if (_selectedSessionType == 'offline' && _selectedMeetingLocation != null)
+                    _buildSummaryRow('Location', _getMeetingLocationText()),
                   
                   const Divider(height: AppTheme.spacingXL),
                   
+                  _buildSummaryRow('Hourly Rate', '${_getSelectedHourlyRate().toStringAsFixed(0)} ETB'),
+                  _buildSummaryRow('Duration', '$_selectedDuration hours'),
+                  
+                  const Divider(height: AppTheme.spacingLG),
+                  
                   _buildSummaryRow(
                     'Total Amount',
-                    '\$${widget.hourlyRate.toStringAsFixed(0)}',
+                    '${(_getSelectedHourlyRate() * _selectedDuration).toStringAsFixed(0)} ETB',
                     isTotal: true,
                   ),
                 ],
@@ -1006,7 +1079,7 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
                       ),
                     )
                   : Text(
-                      'Book Session - \$${widget.hourlyRate.toStringAsFixed(0)}',
+                      'Book Session - ${(_getSelectedHourlyRate() * _selectedDuration).toStringAsFixed(0)} ETB',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -1042,6 +1115,19 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
         ],
       ),
     );
+  }
+
+  String _getMeetingLocationText() {
+    switch (_selectedMeetingLocation) {
+      case 'studentHome':
+        return 'Student Home';
+      case 'tutorLocation':
+        return 'Tutor Location';
+      case 'publicPlace':
+        return 'Public Place';
+      default:
+        return 'Not specified';
+    }
   }
 
   Future<void> _bookSession() async {
@@ -1091,7 +1177,7 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
 
       if (response.success) {
         // Booking created successfully - now proceed to payment
-        final booking = response.data['booking'] ?? response.data;
+        final booking = response.data?['booking'] ?? response.data ?? {};
         final bookingId = booking['_id'] ?? booking['id'];
         
         if (mounted) {

@@ -59,8 +59,8 @@ class BookingService {
         'mode': mode,
       };
       
-      if (duration != null) data['duration'] = duration;
-      if (totalAmount != null) data['totalAmount'] = totalAmount;
+      if (duration != null) data['duration'] = duration.toString();
+      if (totalAmount != null) data['totalAmount'] = totalAmount.toString();
       if (location != null) data['location'] = location;
       if (message != null) data['message'] = message;
       

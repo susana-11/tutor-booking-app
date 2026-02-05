@@ -27,6 +27,13 @@ class NotificationService {
   // Create and save notification
   async createNotification({ userId, type, title, body, data = {}, priority = 'normal', actionUrl, imageUrl }) {
     try {
+      console.log('📝 Creating notification:', {
+        userId: userId.toString(),
+        type,
+        title,
+        priority
+      });
+
       const notification = new Notification({
         userId,
         type,
@@ -39,6 +46,7 @@ class NotificationService {
       });
 
       await notification.save();
+      console.log('✅ Notification saved to database:', notification._id.toString());
       
       // Send push notification
       await this.sendPushNotification(userId, { title, body, data, priority });
@@ -55,11 +63,14 @@ class NotificationService {
           priority,
           createdAt: notification.createdAt
         });
+        console.log('✅ Real-time notification emitted via Socket.IO');
+      } else {
+        console.log('⚠️  Socket.IO not available for real-time notification');
       }
 
       return notification;
     } catch (error) {
-      console.error('Create notification error:', error);
+      console.error('❌ Create notification error:', error);
       throw error;
     }
   }
@@ -165,6 +176,56 @@ class NotificationService {
     });
   }
 
+  // Send booking confirmed notification (after payment)
+  async sendBookingConfirmedNotification(booking) {
+    try {
+      const sessionDate = new Date(booking.sessionDate);
+      const dateStr = sessionDate.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+
+      const studentName = booking.studentId?.firstName || 'Student';
+      const tutorName = booking.tutorId?.firstName || 'Tutor';
+      const subject = booking.subject?.name || 'session';
+
+      // Notify student
+      await this.createNotification({
+        userId: booking.studentId._id || booking.studentId,
+        type: 'booking_confirmed',
+        title: 'Booking Confirmed! 🎉',
+        body: `Your ${subject} session with ${tutorName} on ${dateStr} at ${booking.startTime} is confirmed!`,
+        data: { 
+          type: 'booking_confirmed', 
+          bookingId: booking._id.toString() 
+        },
+        priority: 'high',
+        actionUrl: '/student/bookings'
+      });
+
+      // Notify tutor
+      await this.createNotification({
+        userId: booking.tutorId._id || booking.tutorId,
+        type: 'booking_confirmed',
+        title: 'New Booking Confirmed! 🎉',
+        body: `${studentName} booked a ${subject} session on ${dateStr} at ${booking.startTime}`,
+        data: { 
+          type: 'booking_confirmed', 
+          bookingId: booking._id.toString() 
+        },
+        priority: 'high',
+        actionUrl: '/tutor/bookings'
+      });
+
+      console.log(`✅ Sent booking confirmed notifications for booking ${booking._id}`);
+      return true;
+    } catch (error) {
+      console.error('Error sending booking confirmed notification:', error);
+      throw error;
+    }
+  }
+
   async notifyBookingDeclined({ studentId, tutorName, subject, reason, bookingId }) {
     return this.createNotification({
       userId: studentId,
@@ -178,13 +239,21 @@ class NotificationService {
   }
 
   async notifyBookingCancelled({ userId, cancelledBy, subject, date, reason, bookingId }) {
+    console.log('📧 Creating booking cancelled notification:', {
+      userId: userId.toString(),
+      cancelledBy,
+      subject,
+      date,
+      bookingId: bookingId.toString()
+    });
+
     return this.createNotification({
       userId,
       type: 'booking_cancelled',
       title: 'Booking Cancelled',
-      body: `Your ${subject} session on ${date} was cancelled${reason ? `: ${reason}` : ''}`,
-      data: { type: 'booking_cancelled', cancelledBy, bookingId },
-      priority: 'normal',
+      body: `Your ${subject} session on ${date} was cancelled by ${cancelledBy}${reason ? `: ${reason}` : ''}`,
+      data: { type: 'booking_cancelled', cancelledBy, bookingId: bookingId.toString() },
+      priority: 'high',
       actionUrl: '/bookings'
     });
   }
