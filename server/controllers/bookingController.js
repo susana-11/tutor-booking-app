@@ -184,11 +184,25 @@ exports.getTutorBookingRequests = async (req, res) => {
       studentPhone: booking.studentId.phone,
       slotId: booking.slotId,
       sessionDate: booking.sessionDate,
-      timeSlot: booking.timeSlot,
+      // Support both old and new format
+      timeSlot: booking.timeSlot || {
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        durationMinutes: booking.duration
+      },
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      duration: booking.duration,
       subject: booking.subject,
-      message: booking.notes,
-      amount: booking.amount,
+      subjectName: booking.subject?.name,
+      sessionType: booking.sessionType,
+      location: booking.location,
+      message: booking.notes?.student || booking.notes,
+      amount: booking.totalAmount || booking.amount,
+      totalAmount: booking.totalAmount,
+      pricePerHour: booking.pricePerHour,
       status: booking.status,
+      paymentStatus: booking.paymentStatus || booking.payment?.status,
       requestedAt: booking.createdAt
     }));
 
