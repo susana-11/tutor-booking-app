@@ -79,11 +79,28 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('My Earnings'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
+        elevation: 0,
+        backgroundColor: isDark ? const Color(0xFF16213E) : Colors.white,
+        title: ShaderMask(
+          shaderCallback: (bounds) => LinearGradient(
+            colors: isDark 
+                ? [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)]
+                : [const Color(0xFF0F3460), const Color(0xFF16213E)],
+          ).createShader(bounds),
+          child: const Text(
+            'My Earnings',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              color: Colors.white,
+            ),
+          ),
+        ),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) => setState(() => _selectedPeriod = value),
@@ -91,13 +108,29 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
               value: period,
               child: Text(period),
             )).toList(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMD),
+            child: Container(
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark 
+                    ? const Color(0xFF6B7FA8).withOpacity(0.2)
+                    : const Color(0xFFF5F7FA),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(_selectedPeriod),
-                  const Icon(Icons.arrow_drop_down),
+                  Text(
+                    _selectedPeriod,
+                    style: TextStyle(
+                      color: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                  ),
                 ],
               ),
             ),
@@ -105,9 +138,12 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          indicatorColor: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+          labelColor: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+          unselectedLabelColor: isDark 
+              ? Colors.white.withOpacity(0.5)
+              : const Color(0xFF6B7FA8).withOpacity(0.6),
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           tabs: const [
             Tab(text: 'Overview'),
             Tab(text: 'Transactions'),
@@ -118,17 +154,23 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildOverviewTab(),
-          _buildTransactionsTab(),
-          _buildAnalyticsTab(),
+          _buildOverviewTab(isDark),
+          _buildTransactionsTab(isDark),
+          _buildAnalyticsTab(isDark),
         ],
       ),
     );
   }
 
-  Widget _buildOverviewTab() {
+  Widget _buildOverviewTab(bool isDark) {
     if (_isLoadingBalance) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(
+            isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+          ),
+        ),
+      );
     }
 
     final available = (_balance?['available'] ?? 0).toDouble();
@@ -148,9 +190,10 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
                 child: _buildEarningsCard(
                   'Available',
                   'ETB ${available.toStringAsFixed(2)}',
-                  Icons.account_balance_wallet,
-                  Colors.green,
+                  Icons.account_balance_wallet_rounded,
+                  isDark ? const Color(0xFF7FA87F) : Colors.green,
                   'Ready to withdraw',
+                  isDark,
                 ),
               ),
               const SizedBox(width: AppTheme.spacingMD),
@@ -158,9 +201,10 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
                 child: _buildEarningsCard(
                   'Pending',
                   'ETB ${pending.toStringAsFixed(2)}',
-                  Icons.pending,
-                  Colors.orange,
+                  Icons.pending_rounded,
+                  isDark ? const Color(0xFFD4A574) : Colors.orange,
                   'In progress',
+                  isDark,
                 ),
               ),
             ],
@@ -174,9 +218,10 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
                 child: _buildEarningsCard(
                   'Total Earned',
                   'ETB ${total.toStringAsFixed(2)}',
-                  Icons.trending_up,
-                  Colors.blue,
+                  Icons.trending_up_rounded,
+                  isDark ? const Color(0xFF6B7FA8) : Colors.blue,
                   'All time',
+                  isDark,
                 ),
               ),
               const SizedBox(width: AppTheme.spacingMD),
@@ -184,9 +229,10 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
                 child: _buildEarningsCard(
                   'Withdrawn',
                   'ETB ${withdrawn.toStringAsFixed(2)}',
-                  Icons.money_off,
-                  Colors.purple,
+                  Icons.money_off_rounded,
+                  isDark ? const Color(0xFF8B7FA8) : Colors.purple,
                   'Total withdrawn',
+                  isDark,
                 ),
               ),
             ],
@@ -196,16 +242,36 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
 
           // Withdraw Button
           if (available > 0)
-            SizedBox(
+            Container(
               width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark
+                      ? [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)]
+                      : [const Color(0xFF0F3460), const Color(0xFF16213E)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: (isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460))
+                        .withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
               child: ElevatedButton.icon(
                 onPressed: _showWithdrawDialog,
-                icon: const Icon(Icons.account_balance),
+                icon: const Icon(Icons.account_balance_rounded),
                 label: const Text('Withdraw Funds'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
+                  backgroundColor: Colors.transparent,
                   foregroundColor: Colors.white,
+                  shadowColor: Colors.transparent,
                   padding: const EdgeInsets.all(AppTheme.spacingLG),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
               ),
             ),
@@ -215,54 +281,126 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
           // Earnings Breakdown
           Text(
             'Earnings Breakdown',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            style: TextStyle(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF0F3460),
             ),
           ),
           
           const SizedBox(height: AppTheme.spacingLG),
           
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingLG),
-              child: Column(
-                children: [
-                  _buildBreakdownItem('Total Earnings', 'ETB ${total.toStringAsFixed(2)}', Colors.green),
-                  const Divider(),
-                  _buildBreakdownItem('Withdrawn', 'ETB ${withdrawn.toStringAsFixed(2)}', Colors.red),
-                  const Divider(),
-                  _buildBreakdownItem('Available Balance', 'ETB ${available.toStringAsFixed(2)}', Colors.blue, isTotal: true),
-                ],
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
+                    : [Colors.white, const Color(0xFFF5F7FA)],
               ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withOpacity(0.3)
+                      : Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(AppTheme.spacingLG),
+            child: Column(
+              children: [
+                _buildBreakdownItem('Total Earnings', 'ETB ${total.toStringAsFixed(2)}', 
+                    isDark ? const Color(0xFF7FA87F) : Colors.green, isDark),
+                const Divider(),
+                _buildBreakdownItem('Withdrawn', 'ETB ${withdrawn.toStringAsFixed(2)}', 
+                    isDark ? Colors.redAccent : Colors.red, isDark),
+                const Divider(),
+                _buildBreakdownItem('Available Balance', 'ETB ${available.toStringAsFixed(2)}', 
+                    isDark ? const Color(0xFF6B7FA8) : Colors.blue, isDark, isTotal: true),
+              ],
             ),
           ),
           
           const SizedBox(height: AppTheme.spacingXL),
           
           // Bank Account Settings
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingLG),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Bank Account Settings',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
+                    : [Colors.white, const Color(0xFFF5F7FA)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withOpacity(0.3)
+                      : Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(AppTheme.spacingLG),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bank Account Settings',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F3460),
+                  ),
+                ),
+                const SizedBox(height: AppTheme.spacingMD),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: isDark
+                            ? [const Color(0xFF6B7FA8).withOpacity(0.3), const Color(0xFF8B9DC3).withOpacity(0.3)]
+                            : [const Color(0xFF0F3460).withOpacity(0.1), const Color(0xFF16213E).withOpacity(0.1)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.account_balance_rounded,
+                      color: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
                     ),
                   ),
-                  const SizedBox(height: AppTheme.spacingMD),
-                  ListTile(
-                    leading: const Icon(Icons.account_balance),
-                    title: const Text('Bank Account'),
-                    subtitle: const Text('Manage your bank account'),
-                    trailing: const Icon(Icons.arrow_forward_ios),
-                    contentPadding: EdgeInsets.zero,
-                    onTap: _manageBankAccount,
+                  title: Text(
+                    'Bank Account',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF0F3460),
+                    ),
                   ),
-                ],
-              ),
+                  subtitle: Text(
+                    'Manage your bank account',
+                    style: TextStyle(
+                      color: isDark 
+                          ? Colors.white.withOpacity(0.6)
+                          : const Color(0xFF6B7FA8),
+                    ),
+                  ),
+                  trailing: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                    size: 16,
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  onTap: _manageBankAccount,
+                ),
+              ],
             ),
           ),
         ],
@@ -270,9 +408,15 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
     );
   }
 
-  Widget _buildTransactionsTab() {
+  Widget _buildTransactionsTab(bool isDark) {
     if (_isLoadingTransactions) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(
+            isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+          ),
+        ),
+      );
     }
 
     if (_transactions.isEmpty) {
@@ -280,11 +424,32 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: AppTheme.spacingMD),
+            Container(
+              padding: const EdgeInsets.all(40),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark
+                      ? [const Color(0xFF16213E).withOpacity(0.5), const Color(0xFF0F3460).withOpacity(0.3)]
+                      : [const Color(0xFFECEFF4), const Color(0xFFE8EAF6)],
+                ),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Icon(
+                Icons.receipt_long_rounded,
+                size: 64,
+                color: isDark 
+                    ? const Color(0xFF6B7FA8).withOpacity(0.5)
+                    : const Color(0xFF0F3460).withOpacity(0.3),
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingLG),
             Text(
               'No transactions yet',
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : const Color(0xFF0F3460),
+              ),
             ),
           ],
         ),
@@ -294,11 +459,11 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
     return ListView.builder(
       padding: const EdgeInsets.all(AppTheme.spacingLG),
       itemCount: _transactions.length,
-      itemBuilder: (context, index) => _buildTransactionCard(_transactions[index]),
+      itemBuilder: (context, index) => _buildTransactionCard(_transactions[index], isDark),
     );
   }
 
-  Widget _buildAnalyticsTab() {
+  Widget _buildAnalyticsTab(bool isDark) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppTheme.spacingLG),
       child: Column(
@@ -307,27 +472,49 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
           // Performance Metrics
           Text(
             'Performance Metrics',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            style: TextStyle(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF0F3460),
             ),
           ),
           
           const SizedBox(height: AppTheme.spacingLG),
           
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingLG),
-              child: Column(
-                children: [
-                  _buildMetricRow('Average Rating', '4.8/5', Icons.star, Colors.amber),
-                  const Divider(),
-                  _buildMetricRow('Response Rate', '95%', Icons.reply, Colors.green),
-                  const Divider(),
-                  _buildMetricRow('Completion Rate', '98%', Icons.check_circle, Colors.blue),
-                  const Divider(),
-                  _buildMetricRow('Repeat Students', '67%', Icons.refresh, Colors.purple),
-                ],
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
+                    : [Colors.white, const Color(0xFFF5F7FA)],
               ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withOpacity(0.3)
+                      : Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(AppTheme.spacingLG),
+            child: Column(
+              children: [
+                _buildMetricRow('Average Rating', '4.8/5', Icons.star_rounded, Colors.amber, isDark),
+                const Divider(),
+                _buildMetricRow('Response Rate', '95%', Icons.reply_rounded, 
+                    isDark ? const Color(0xFF7FA87F) : Colors.green, isDark),
+                const Divider(),
+                _buildMetricRow('Completion Rate', '98%', Icons.check_circle_rounded, 
+                    isDark ? const Color(0xFF6B7FA8) : Colors.blue, isDark),
+                const Divider(),
+                _buildMetricRow('Repeat Students', '67%', Icons.refresh_rounded, 
+                    isDark ? const Color(0xFF8B7FA8) : Colors.purple, isDark),
+              ],
             ),
           ),
           
@@ -336,20 +523,43 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
           // Subject Performance (Placeholder)
           Text(
             'Subject Performance',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            style: TextStyle(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF0F3460),
             ),
           ),
           
           const SizedBox(height: AppTheme.spacingLG),
           
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingLG),
-              child: Center(
-                child: Text(
-                  'Subject performance analytics coming soon',
-                  style: TextStyle(color: Colors.grey[600]),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
+                    : [Colors.white, const Color(0xFFF5F7FA)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withOpacity(0.3)
+                      : Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(AppTheme.spacingXL),
+            child: Center(
+              child: Text(
+                'Subject performance analytics coming soon',
+                style: TextStyle(
+                  color: isDark 
+                      ? Colors.white.withOpacity(0.6)
+                      : const Color(0xFF6B7FA8),
                 ),
               ),
             ),
@@ -360,38 +570,68 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
           // Monthly Trends
           Text(
             'Monthly Trends',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            style: TextStyle(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF0F3460),
             ),
           ),
           
           const SizedBox(height: AppTheme.spacingLG),
           
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingLG),
-              child: Column(
-                children: [
-                  Text(
-                    'Earnings Growth',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: AppTheme.spacingLG),
-                  // Placeholder for chart
-                  Container(
-                    height: 200,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-                    ),
-                    child: const Center(
-                      child: Text('Chart will be implemented here'),
-                    ),
-                  ),
-                ],
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
+                    : [Colors.white, const Color(0xFFF5F7FA)],
               ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withOpacity(0.3)
+                      : Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(AppTheme.spacingLG),
+            child: Column(
+              children: [
+                Text(
+                  'Earnings Growth',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F3460),
+                  ),
+                ),
+                const SizedBox(height: AppTheme.spacingLG),
+                // Placeholder for chart
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: isDark 
+                        ? const Color(0xFF0F3460).withOpacity(0.3)
+                        : const Color(0xFFECEFF4),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'Chart will be implemented here',
+                      style: TextStyle(
+                        color: isDark 
+                            ? Colors.white.withOpacity(0.5)
+                            : const Color(0xFF6B7FA8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -399,51 +639,80 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
     );
   }
 
-  Widget _buildEarningsCard(String title, String amount, IconData icon, Color color, String change) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacingLG),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(icon, color: color, size: 24),
-                Flexible(
-                  child: Text(
-                    change,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppTheme.spacingSM),
-            Text(
-              amount,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
+  Widget _buildEarningsCard(String title, String amount, IconData icon, Color color, String change, bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
+              : [Colors.white, const Color(0xFFF5F7FA)],
         ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withOpacity(0.3)
+                : Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(AppTheme.spacingLG),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              Flexible(
+                child: Text(
+                  change,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spacingMD),
+          Text(
+            amount,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark 
+                  ? Colors.white.withOpacity(0.6)
+                  : const Color(0xFF6B7FA8),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildBreakdownItem(String label, String amount, Color color, {bool isTotal = false}) {
+  Widget _buildBreakdownItem(String label, String amount, Color color, bool isDark, {bool isTotal = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingSM),
       child: Row(
@@ -451,15 +720,17 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
         children: [
           Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+            style: TextStyle(
+              fontWeight: isTotal ? FontWeight.bold : FontWeight.w500,
+              color: isDark ? Colors.white : const Color(0xFF0F3460),
             ),
           ),
           Text(
             amount,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            style: TextStyle(
               color: color,
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+              fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
+              fontSize: isTotal ? 16 : 14,
             ),
           ),
         ],
@@ -505,7 +776,7 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
     );
   }
 
-  Widget _buildTransactionCard(Map<String, dynamic> transaction) {
+  Widget _buildTransactionCard(Map<String, dynamic> transaction, bool isDark) {
     final type = transaction['type'] ?? 'payment';
     final amount = (transaction['amount'] ?? 0).toDouble();
     final netAmount = (transaction['netAmount'] ?? amount).toDouble();
@@ -513,27 +784,74 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
     final description = transaction['description'] ?? 'Transaction';
     final createdAt = transaction['createdAt'] ?? '';
 
-    Color statusColor = Colors.orange;
-    if (status == 'completed') statusColor = Colors.green;
-    if (status == 'failed') statusColor = Colors.red;
+    Color statusColor = isDark ? const Color(0xFFD4A574) : Colors.orange;
+    if (status == 'completed') statusColor = isDark ? const Color(0xFF7FA87F) : Colors.green;
+    if (status == 'failed') statusColor = Colors.redAccent;
 
-    IconData icon = Icons.payment;
-    if (type == 'withdrawal') icon = Icons.account_balance;
-    if (type == 'refund') icon = Icons.money_off;
+    IconData icon = Icons.payment_rounded;
+    if (type == 'withdrawal') icon = Icons.account_balance_rounded;
+    if (type == 'refund') icon = Icons.money_off_rounded;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppTheme.spacingSM),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: statusColor.withOpacity(0.1),
-          child: Icon(icon, color: statusColor),
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
+              : [Colors.white, const Color(0xFFF5F7FA)],
         ),
-        title: Text(description),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withOpacity(0.3)
+                : Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: statusColor, size: 24),
+        ),
+        title: Text(
+          description,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white : const Color(0xFF0F3460),
+          ),
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${_formatDate(createdAt)} • ${type.toUpperCase()}'),
-            Text('Status: $status', style: TextStyle(color: statusColor)),
+            const SizedBox(height: 4),
+            Text(
+              '${_formatDate(createdAt)} • ${type.toUpperCase()}',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark 
+                    ? Colors.white.withOpacity(0.6)
+                    : const Color(0xFF6B7FA8),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Status: $status',
+              style: TextStyle(
+                fontSize: 12,
+                color: statusColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
         trailing: Column(
@@ -542,16 +860,22 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
           children: [
             Text(
               'ETB ${amount.toStringAsFixed(2)}',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              style: TextStyle(
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: type == 'withdrawal' ? Colors.red : Colors.green,
+                color: type == 'withdrawal' 
+                    ? (isDark ? Colors.redAccent : Colors.red)
+                    : (isDark ? const Color(0xFF7FA87F) : Colors.green),
               ),
             ),
             if (type == 'withdrawal')
               Text(
                 'Net: ETB ${netAmount.toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark 
+                      ? Colors.white.withOpacity(0.5)
+                      : const Color(0xFF6B7FA8),
                 ),
               ),
           ],
@@ -570,19 +894,35 @@ class _TutorEarningsScreenState extends State<TutorEarningsScreen>
     }
   }
 
-  Widget _buildMetricRow(String label, String value, IconData icon, Color color) {
+  Widget _buildMetricRow(String label, String value, IconData icon, Color color, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingSM),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 20),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
           const SizedBox(width: AppTheme.spacingMD),
-          Expanded(child: Text(label)),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white : const Color(0xFF0F3460),
+              ),
+            ),
+          ),
           Text(
             value,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            style: TextStyle(
               fontWeight: FontWeight.bold,
               color: color,
+              fontSize: 16,
             ),
           ),
         ],

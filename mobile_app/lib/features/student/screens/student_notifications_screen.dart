@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:math' as math;
+
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/notification_service.dart';
 
@@ -10,17 +12,39 @@ class StudentNotificationsScreen extends StatefulWidget {
   State<StudentNotificationsScreen> createState() => _StudentNotificationsScreenState();
 }
 
-class _StudentNotificationsScreenState extends State<StudentNotificationsScreen> {
+class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
+    with SingleTickerProviderStateMixin {
   final NotificationService _notificationService = NotificationService();
   List<Map<String, dynamic>> _notifications = [];
   bool _isLoading = true;
+  
+  AnimationController? _fadeController;
+  Animation<double>? _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
     _loadNotifications();
     // Refresh unread count
     _notificationService.refreshUnreadCount();
+  }
+
+  void _initializeAnimations() {
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fadeController!,
+      curve: Curves.easeIn,
+    ));
+    
+    _fadeController?.forward();
   }
 
   Future<void> _loadNotifications() async {
@@ -170,61 +194,257 @@ class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final unreadCount = _notifications.where((n) => !(n['read'] ?? false)).length;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Notifications'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-        actions: [
-          if (unreadCount > 0)
-            TextButton(
-              onPressed: () async {
-                try {
-                  await _notificationService.markAllAsRead();
-                  setState(() {
-                    for (var notification in _notifications) {
-                      notification['read'] = true;
-                    }
-                  });
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('All notifications marked as read'),
-                        backgroundColor: Colors.green,
+      extendBodyBehindAppBar: true,
+      appBar: _buildModernAppBar(isDark, unreadCount),
+      body: Stack(
+        children: [
+          // Animated gradient background
+          _buildAnimatedBackground(isDark),
+          
+          // Main content
+          SafeArea(
+            child: _isLoading
+                ? _buildLoadingState(isDark)
+                : _notifications.isEmpty
+                    ? _buildEmptyState(isDark)
+                    : FadeTransition(
+                        opacity: _fadeAnimation ?? const AlwaysStoppedAnimation(1.0),
+                        child: RefreshIndicator(
+                          onRefresh: _loadNotifications,
+                          color: isDark ? const Color(0xFF38B2AC) : AppTheme.primaryColor,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(AppTheme.spacingMD),
+                            itemCount: _notifications.length,
+                            itemBuilder: (context, index) {
+                              return _buildModernNotificationCard(
+                                _notifications[index],
+                                isDark,
+                              );
+                            },
+                          ),
+                        ),
                       ),
-                    );
-                  }
-                } catch (e) {
-                  print('Error marking all as read: $e');
-                }
-              },
-              child: const Text(
-                'Mark all read',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
+          ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _notifications.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-                  onRefresh: _loadNotifications,
-                  child: ListView.builder(
-                    itemCount: _notifications.length,
-                    itemBuilder: (context, index) {
-                      final notification = _notifications[index];
-                      return _buildNotificationTile(notification);
-                    },
-                  ),
-                ),
     );
   }
 
-  Widget _buildNotificationTile(Map<String, dynamic> notification) {
+  PreferredSizeWidget _buildModernAppBar(bool isDark, int unreadCount) {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: Container(
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => context.pop(),
+            borderRadius: BorderRadius.circular(12),
+            child: Icon(
+              Icons.arrow_back_rounded,
+              color: isDark ? Colors.white : AppTheme.textPrimaryColor,
+            ),
+          ),
+        ),
+      ),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+            ).createShader(bounds),
+            child: const Text(
+              'Notifications',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          if (unreadCount > 0) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF6B46C1).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Text(
+                '$unreadCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        if (unreadCount > 0)
+          Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () async {
+                  try {
+                    await _notificationService.markAllAsRead();
+                    setState(() {
+                      for (var notification in _notifications) {
+                        notification['read'] = true;
+                      }
+                    });
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('All notifications marked as read'),
+                          backgroundColor: Colors.green,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    print('Error marking all as read: $e');
+                  }
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.done_all_rounded,
+                        size: 18,
+                        color: isDark ? Colors.white : AppTheme.textPrimaryColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Mark all',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : AppTheme.textPrimaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAnimatedBackground(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  const Color(0xFF1A1A2E),
+                  const Color(0xFF16213E),
+                  const Color(0xFF0F3460),
+                ]
+              : [
+                  const Color(0xFFF8F9FA),
+                  const Color(0xFFE9ECEF),
+                  const Color(0xFFDEE2E6),
+                ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState(bool isDark) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B46C1).withOpacity(0.3),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Loading notifications...',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : AppTheme.textSecondaryColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernNotificationCard(Map<String, dynamic> notification, bool isDark) {
     final isRead = notification['read'] ?? false;
     final type = notification['type'] as String;
     final icon = _getIconForType(type);
@@ -237,10 +457,30 @@ class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
       key: Key(notification['_id']),
       direction: DismissDirection.endToStart,
       background: Container(
-        color: Colors.red,
+        margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFef4444), Color(0xFFdc2626)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: AppTheme.spacingLG),
-        child: const Icon(Icons.delete, color: Colors.white),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.delete_rounded, color: Colors.white, size: 28),
+            SizedBox(height: 4),
+            Text(
+              'Delete',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
       ),
       onDismissed: (direction) async {
         try {
@@ -250,7 +490,13 @@ class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
           });
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Notification deleted')),
+              SnackBar(
+                content: const Text('Notification deleted'),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             );
           }
         } catch (e) {
@@ -258,78 +504,249 @@ class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
         }
       },
       child: Container(
-        color: isRead ? Colors.white : Colors.blue.shade50,
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: color.withOpacity(0.1),
-            child: Icon(
-              icon,
-              color: color,
+        margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withOpacity(isRead ? 0.05 : 0.08)
+              : isRead ? Colors.white : const Color(0xFFF0F4FF),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isRead
+                ? (isDark ? Colors.white.withOpacity(0.1) : Colors.grey.withOpacity(0.2))
+                : color.withOpacity(0.3),
+            width: isRead ? 1 : 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withOpacity(0.2)
+                  : (isRead ? Colors.grey.withOpacity(0.1) : color.withOpacity(0.15)),
+              blurRadius: isRead ? 10 : 15,
+              offset: Offset(0, isRead ? 4 : 6),
             ),
-          ),
-          title: Text(
-            title,
-            style: TextStyle(
-              fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 4),
-              Text(body),
-              const SizedBox(height: 4),
-              Text(
-                time,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-          trailing: !isRead
-              ? Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.primaryColor,
-                    shape: BoxShape.circle,
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _handleNotificationTap(notification),
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(AppTheme.spacingMD),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Icon with gradient background
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          color,
+                          color.withOpacity(0.7),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: color.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      icon,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                   ),
-                )
-              : null,
-          onTap: () => _handleNotificationTap(notification),
+                  
+                  const SizedBox(width: 12),
+                  
+                  // Content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: isRead ? FontWeight.w600 : FontWeight.w900,
+                                  color: isDark ? Colors.white : AppTheme.textPrimaryColor,
+                                ),
+                              ),
+                            ),
+                            if (!isRead)
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+                                  ),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF6B46C1).withOpacity(0.5),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          body,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white.withOpacity(0.7)
+                                : AppTheme.textSecondaryColor,
+                            height: 1.4,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.access_time_rounded,
+                              size: 14,
+                              color: isDark
+                                  ? Colors.white.withOpacity(0.5)
+                                  : Colors.grey[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              time,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.5)
+                                    : Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isDark) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.notifications_none,
-            size: 80,
-            color: Colors.grey[400],
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+              ),
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B46C1).withOpacity(0.3),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.notifications_none_rounded,
+              size: 80,
+              color: Colors.white,
+            ),
           ),
-          const SizedBox(height: AppTheme.spacingLG),
+          const SizedBox(height: AppTheme.spacingXL),
           Text(
             'No notifications',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: Colors.grey[600],
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              color: isDark ? Colors.white : AppTheme.textPrimaryColor,
             ),
           ),
           const SizedBox(height: AppTheme.spacingSM),
           Text(
             'You\'re all caught up!',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey[500],
+            style: TextStyle(
+              fontSize: 16,
+              color: isDark
+                  ? Colors.white.withOpacity(0.6)
+                  : AppTheme.textSecondaryColor,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingXL),
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B46C1).withOpacity(0.4),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => context.pop(),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                      SizedBox(width: 12),
+                      Text(
+                        'Go Back',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _fadeController?.dispose();
+    super.dispose();
   }
 }

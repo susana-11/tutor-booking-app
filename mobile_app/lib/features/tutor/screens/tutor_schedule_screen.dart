@@ -129,174 +129,391 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Schedule'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-        actions: [
-          if (_pendingRequests.isNotEmpty)
-            Stack(
-              children: [
-                IconButton(
-                  onPressed: () => _tabController.animateTo(2),
-                  icon: const Icon(Icons.notifications),
-                ),
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      '${_pendingRequests.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          IconButton(
-            onPressed: _refreshSchedule,
-            icon: _isRefreshing 
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
+      extendBodyBehindAppBar: true,
+      appBar: _buildModernAppBar(isDark),
+      body: Stack(
+        children: [
+          _buildElegantBackground(isDark),
+          
+          SafeArea(
+            child: _isLoading
+                ? Center(
                     child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
+                      ),
                     ),
                   )
-                : const Icon(Icons.refresh),
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildWeeklyView(isDark),
+                      _buildSessionsView(isDark),
+                      _buildRequestsView(isDark),
+                    ],
+                  ),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: [
-            const Tab(text: 'Weekly View'),
-            const Tab(text: 'Sessions'),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Requests'),
-                  if (_pendingRequests.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${_pendingRequests.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildWeeklyView(),
-                _buildSessionsView(),
-                _buildRequestsView(),
-              ],
-            ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _addAvailability,
-        backgroundColor: AppTheme.primaryColor,
-        child: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add Slot', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
     );
   }
 
-  Widget _buildWeeklyView() {
+  PreferredSizeWidget _buildModernAppBar(bool isDark) {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      title: ShaderMask(
+        shaderCallback: (bounds) => LinearGradient(
+          colors: isDark 
+              ? [const Color(0xFFE8EAF6), const Color(0xFFC5CAE9)]
+              : [const Color(0xFF5F6F94), const Color(0xFF8B9DC3)],
+        ).createShader(bounds),
+        child: const Text(
+          'My Schedule',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+        ),
+      ),
+      actions: [
+        if (_pendingRequests.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _tabController.animateTo(2),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Stack(
+                    children: [
+                      Icon(
+                        Icons.notifications_outlined,
+                        color: isDark ? Colors.white70 : const Color(0xFF5F6F94),
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            '${_pendingRequests.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withOpacity(0.08)
+                : Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _refreshSchedule,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: _isRefreshing 
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isDark ? Colors.white70 : const Color(0xFF5F6F94),
+                          ),
+                        ),
+                      )
+                    : Icon(
+                        Icons.refresh,
+                        color: isDark ? Colors.white70 : const Color(0xFF5F6F94),
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(50),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white.withOpacity(0.7),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            indicator: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)]
+                    : [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            labelColor: Colors.white,
+            unselectedLabelColor: isDark ? Colors.white60 : const Color(0xFF6B7FA8),
+            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicatorPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            tabs: [
+              const Tab(text: 'Weekly'),
+              const Tab(text: 'Sessions'),
+              Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Requests'),
+                    if (_pendingRequests.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '${_pendingRequests.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildElegantBackground(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  const Color(0xFF1A1A2E),
+                  const Color(0xFF16213E),
+                  const Color(0xFF0F3460),
+                ]
+              : [
+                  const Color(0xFFF5F7FA),
+                  const Color(0xFFECEFF4),
+                  const Color(0xFFE8EAF6),
+                ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeeklyView(bool isDark) {
     return RefreshIndicator(
       onRefresh: _refreshSchedule,
+      color: isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppTheme.spacingLG),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Week Navigation
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedDate = _selectedDate.subtract(const Duration(days: 7));
-                    });
-                    _loadScheduleData();
-                  },
-                  icon: const Icon(Icons.chevron_left),
+            // Week Navigation Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withOpacity(0.05)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.08)
+                      : const Color(0xFFE0E0E0),
                 ),
-                Text(
-                  _getWeekRange(_selectedDate),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark
+                        ? Colors.black.withOpacity(0.2)
+                        : const Color(0xFF6B7FA8).withOpacity(0.05),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
-                ),
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedDate = _selectedDate.add(const Duration(days: 7));
-                    });
-                    _loadScheduleData();
-                  },
-                  icon: const Icon(Icons.chevron_right),
-                ),
-              ],
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.08)
+                          : const Color(0xFF6B7FA8).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _selectedDate = _selectedDate.subtract(const Duration(days: 7));
+                        });
+                        _loadScheduleData();
+                      },
+                      icon: Icon(
+                        Icons.chevron_left,
+                        color: isDark ? Colors.white70 : const Color(0xFF6B7FA8),
+                      ),
+                    ),
+                  ),
+                  Column(
+                    children: [
+                      Text(
+                        _getWeekRange(_selectedDate),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF2C3E50),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Week ${_getWeekNumber(_selectedDate)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? Colors.white.withOpacity(0.6)
+                              : const Color(0xFF6B7FA8),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.08)
+                          : const Color(0xFF6B7FA8).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _selectedDate = _selectedDate.add(const Duration(days: 7));
+                        });
+                        _loadScheduleData();
+                      },
+                      icon: Icon(
+                        Icons.chevron_right,
+                        color: isDark ? Colors.white70 : const Color(0xFF6B7FA8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             
             const SizedBox(height: AppTheme.spacingLG),
             
             // Legend
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildLegendItem('Available', Colors.green),
-                _buildLegendItem('Booked', Colors.blue),
-                _buildLegendItem('Unavailable', Colors.grey),
-              ],
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withOpacity(0.03)
+                    : const Color(0xFFF8F9FA),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildLegendItem('Available', const Color(0xFF7FA87F), isDark),
+                  _buildLegendItem('Booked', const Color(0xFF6B7FA8), isDark),
+                  _buildLegendItem('Unavailable', const Color(0xFF90A4AE), isDark),
+                ],
+              ),
             ),
             
             const SizedBox(height: AppTheme.spacingLG),
             
             // Weekly Schedule
             if (_weeklySchedule != null)
-              ..._weeklySchedule!.schedule.entries.map((entry) => _buildDaySchedule(entry.key, entry.value))
+              ..._weeklySchedule!.schedule.entries.map((entry) => _buildDaySchedule(entry.key, entry.value, isDark))
             else
-              const Center(child: CircularProgressIndicator()),
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  int _getWeekNumber(DateTime date) {
+    final firstDayOfYear = DateTime(date.year, 1, 1);
+    final daysSinceFirstDay = date.difference(firstDayOfYear).inDays;
+    return (daysSinceFirstDay / 7).ceil() + 1;
   }
 
   Widget _buildCalendarView() {
@@ -393,102 +610,235 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
     );
   }
 
-  Widget _buildLegendItem(String label, Color color) {
+  Widget _buildLegendItem(String label, Color color, bool isDark) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 12,
-          height: 12,
+          width: 14,
+          height: 14,
           decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
+            color: color.withOpacity(0.2),
+            border: Border.all(color: color, width: 2),
+            borderRadius: BorderRadius.circular(4),
           ),
         ),
         const SizedBox(width: AppTheme.spacingXS),
         Text(
           label,
-          style: Theme.of(context).textTheme.bodySmall,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white70 : const Color(0xFF6B7FA8),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildDaySchedule(String day, List<AvailabilitySlot> slots) {
-    return Card(
+  Widget _buildDaySchedule(String day, List<AvailabilitySlot> slots, bool isDark) {
+    final isToday = day == _getDayName(DateTime.now());
+    
+    return Container(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isToday
+              ? (isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8))
+              : (isDark ? Colors.white.withOpacity(0.08) : const Color(0xFFE0E0E0)),
+          width: isToday ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withOpacity(0.2)
+                : const Color(0xFF6B7FA8).withOpacity(0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(AppTheme.spacingLG),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              day,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isToday
+                          ? [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)]
+                          : isDark
+                              ? [Colors.white.withOpacity(0.08), Colors.white.withOpacity(0.05)]
+                              : [const Color(0xFFF5F7FA), const Color(0xFFECEFF4)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    day,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: isToday
+                          ? Colors.white
+                          : (isDark ? Colors.white : const Color(0xFF2C3E50)),
+                    ),
+                  ),
+                ),
+                if (isToday) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7FA87F).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'TODAY',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF7FA87F),
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                Text(
+                  '${slots.length} slot${slots.length != 1 ? 's' : ''}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark
+                        ? Colors.white.withOpacity(0.6)
+                        : const Color(0xFF6B7FA8),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: AppTheme.spacingMD),
             if (slots.isEmpty)
-              Text(
-                'No availability set',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.03)
+                      : const Color(0xFFF8F9FA),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.event_busy_outlined,
+                      size: 20,
+                      color: isDark
+                          ? Colors.white.withOpacity(0.4)
+                          : const Color(0xFF90A4AE),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'No availability set for this day',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? Colors.white.withOpacity(0.5)
+                            : const Color(0xFF90A4AE),
+                      ),
+                    ),
+                  ],
                 ),
               )
             else
-              ...slots.map((slot) => _buildTimeSlotWidget(slot)),
+              ...slots.map((slot) => _buildTimeSlotWidget(slot, isDark)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTimeSlotWidget(AvailabilitySlot slot) {
+  String _getDayName(DateTime date) {
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    return days[date.weekday - 1];
+  }
+
+  Widget _buildTimeSlotWidget(AvailabilitySlot slot, bool isDark) {
     Color backgroundColor;
+    Color borderColor;
     Color textColor;
     String status;
+    IconData statusIcon;
     
     if (slot.isBooked) {
-      backgroundColor = Colors.blue.withOpacity(0.1);
-      textColor = Colors.blue;
+      backgroundColor = const Color(0xFF6B7FA8).withOpacity(0.1);
+      borderColor = const Color(0xFF6B7FA8);
+      textColor = const Color(0xFF6B7FA8);
       status = 'Booked';
+      statusIcon = Icons.event_available;
     } else if (slot.isAvailable) {
-      backgroundColor = Colors.green.withOpacity(0.1);
-      textColor = Colors.green;
+      backgroundColor = const Color(0xFF7FA87F).withOpacity(0.1);
+      borderColor = const Color(0xFF7FA87F);
+      textColor = const Color(0xFF7FA87F);
       status = 'Available';
+      statusIcon = Icons.check_circle_outline;
     } else {
-      backgroundColor = Colors.grey.withOpacity(0.1);
-      textColor = Colors.grey;
+      backgroundColor = const Color(0xFF90A4AE).withOpacity(0.1);
+      borderColor = const Color(0xFF90A4AE);
+      textColor = const Color(0xFF90A4AE);
       status = 'Unavailable';
+      statusIcon = Icons.block;
     }
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingSM),
-      padding: const EdgeInsets.all(AppTheme.spacingMD),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-        border: Border.all(color: textColor.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor.withOpacity(0.3), width: 1.5),
       ),
       child: Row(
         children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: textColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              statusIcon,
+              color: textColor,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   slot.timeSlot.displayTime,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : const Color(0xFF2C3E50),
                   ),
                 ),
                 if (slot.isBooked && slot.booking != null) ...[
-                  const SizedBox(height: AppTheme.spacingXS),
+                  const SizedBox(height: 4),
                   Text(
                     '${slot.booking!.studentName} • ${slot.booking!.subject}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? Colors.white.withOpacity(0.6)
+                          : const Color(0xFF6B7FA8),
                     ),
                   ),
                 ],
@@ -497,52 +847,96 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
           ),
           Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spacingSM,
-              vertical: AppTheme.spacingXS,
+              horizontal: 10,
+              vertical: 5,
             ),
             decoration: BoxDecoration(
-              color: textColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+              color: textColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               status,
               style: TextStyle(
                 color: textColor,
-                fontWeight: FontWeight.w500,
-                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
               ),
             ),
           ),
-          const SizedBox(width: AppTheme.spacingSM),
+          const SizedBox(width: 8),
           PopupMenuButton(
+            icon: Icon(
+              Icons.more_vert,
+              color: isDark ? Colors.white70 : const Color(0xFF6B7FA8),
+              size: 20,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             itemBuilder: (context) => [
               if (slot.isAvailable && !slot.isBooked)
                 const PopupMenuItem(
                   value: 'make_unavailable',
-                  child: Text('Make Unavailable'),
+                  child: Row(
+                    children: [
+                      Icon(Icons.block, size: 18),
+                      SizedBox(width: 8),
+                      Text('Make Unavailable'),
+                    ],
+                  ),
                 ),
               if (!slot.isAvailable)
                 const PopupMenuItem(
                   value: 'make_available',
-                  child: Text('Make Available'),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle, size: 18),
+                      SizedBox(width: 8),
+                      Text('Make Available'),
+                    ],
+                  ),
                 ),
               if (slot.isBooked) ...[
                 const PopupMenuItem(
                   value: 'view_booking',
-                  child: Text('View Booking'),
+                  child: Row(
+                    children: [
+                      Icon(Icons.visibility, size: 18),
+                      SizedBox(width: 8),
+                      Text('View Booking'),
+                    ],
+                  ),
                 ),
                 const PopupMenuItem(
                   value: 'contact_student',
-                  child: Text('Contact Student'),
+                  child: Row(
+                    children: [
+                      Icon(Icons.message, size: 18),
+                      SizedBox(width: 8),
+                      Text('Contact Student'),
+                    ],
+                  ),
                 ),
               ],
               const PopupMenuItem(
                 value: 'edit',
-                child: Text('Edit Time Slot'),
+                child: Row(
+                  children: [
+                    Icon(Icons.edit, size: 18),
+                    SizedBox(width: 8),
+                    Text('Edit Time Slot'),
+                  ],
+                ),
               ),
               const PopupMenuItem(
                 value: 'delete',
-                child: Text('Delete'),
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, size: 18, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Delete', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
               ),
             ],
             onSelected: (value) => _handleSlotAction(value, slot),
@@ -930,56 +1324,85 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
     }
   }
 
-  Widget _buildSessionsView() {
+  Widget _buildSessionsView(bool isDark) {
     return RefreshIndicator(
       onRefresh: _refreshSchedule,
+      color: isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppTheme.spacingLG),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Sessions Overview
+            // Sessions Overview Card
             Container(
-              padding: const EdgeInsets.all(AppTheme.spacingLG),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [AppTheme.primaryColor.withOpacity(0.1), AppTheme.primaryColor.withOpacity(0.05)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [
+                          const Color(0xFF6B7FA8).withOpacity(0.2),
+                          const Color(0xFF8B9DC3).withOpacity(0.1),
+                        ]
+                      : [
+                          const Color(0xFF6B7FA8).withOpacity(0.1),
+                          const Color(0xFF8B9DC3).withOpacity(0.05),
+                        ],
                 ),
-                borderRadius: BorderRadius.circular(AppTheme.radiusLG),
-                border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0xFF6B7FA8).withOpacity(0.3)
+                      : const Color(0xFF6B7FA8).withOpacity(0.2),
+                ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(AppTheme.spacingMD),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                      gradient: LinearGradient(
+                        colors: isDark
+                            ? [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)]
+                            : [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6B7FA8).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Icon(
-                      Icons.schedule,
-                      color: AppTheme.primaryColor,
-                      size: 32,
+                    child: const Icon(
+                      Icons.event_note,
+                      color: Colors.white,
+                      size: 28,
                     ),
                   ),
-                  const SizedBox(width: AppTheme.spacingLG),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Upcoming Sessions',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: isDark ? Colors.white : const Color(0xFF2C3E50),
                           ),
                         ),
-                        const SizedBox(height: AppTheme.spacingXS),
+                        const SizedBox(height: 4),
                         Text(
-                          '${_upcomingSessions.length} sessions scheduled',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[600],
+                          '${_upcomingSessions.length} session${_upcomingSessions.length != 1 ? 's' : ''} scheduled',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white.withOpacity(0.6)
+                                : const Color(0xFF6B7FA8),
                           ),
                         ),
                       ],
@@ -997,30 +1420,40 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
                 child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(AppTheme.spacingXL),
+                      padding: const EdgeInsets.all(32),
                       decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(AppTheme.radiusXL),
+                        color: isDark
+                            ? Colors.white.withOpacity(0.03)
+                            : const Color(0xFFF8F9FA),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Icon(
-                        Icons.event_busy,
+                        Icons.event_busy_outlined,
                         size: 64,
-                        color: Colors.grey[400],
+                        color: isDark
+                            ? Colors.white.withOpacity(0.3)
+                            : const Color(0xFFB0BEC5),
                       ),
                     ),
-                    const SizedBox(height: AppTheme.spacingLG),
+                    const SizedBox(height: 20),
                     Text(
                       'No upcoming sessions',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w600,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? Colors.white.withOpacity(0.6)
+                            : const Color(0xFF6B7FA8),
                       ),
                     ),
-                    const SizedBox(height: AppTheme.spacingSM),
+                    const SizedBox(height: 8),
                     Text(
-                      'Sessions will appear here once students book your available slots',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[500],
+                      'Sessions will appear here once students\nbook your available slots',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? Colors.white.withOpacity(0.4)
+                            : const Color(0xFF90A4AE),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -1028,63 +1461,90 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
                 ),
               )
             else
-              ..._upcomingSessions.map((session) => _buildSessionCard(session)),
+              ..._upcomingSessions.map((session) => _buildSessionCard(session, isDark)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRequestsView() {
+  Widget _buildRequestsView(bool isDark) {
     return RefreshIndicator(
       onRefresh: _refreshSchedule,
+      color: isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppTheme.spacingLG),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Requests Overview
+            // Requests Overview Card
             Container(
-              padding: const EdgeInsets.all(AppTheme.spacingLG),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.orange.withOpacity(0.1), Colors.orange.withOpacity(0.05)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [
+                          const Color(0xFFFF8E53).withOpacity(0.2),
+                          const Color(0xFFFF6B6B).withOpacity(0.1),
+                        ]
+                      : [
+                          const Color(0xFFFF8E53).withOpacity(0.1),
+                          const Color(0xFFFF6B6B).withOpacity(0.05),
+                        ],
                 ),
-                borderRadius: BorderRadius.circular(AppTheme.radiusLG),
-                border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0xFFFF8E53).withOpacity(0.3)
+                      : const Color(0xFFFF8E53).withOpacity(0.2),
+                ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(AppTheme.spacingMD),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF6B6B).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.notifications_active,
-                      color: Colors.orange,
-                      size: 32,
+                      color: Colors.white,
+                      size: 28,
                     ),
                   ),
-                  const SizedBox(width: AppTheme.spacingLG),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Booking Requests',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: isDark ? Colors.white : const Color(0xFF2C3E50),
                           ),
                         ),
-                        const SizedBox(height: AppTheme.spacingXS),
+                        const SizedBox(height: 4),
                         Text(
-                          '${_pendingRequests.length} pending requests',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[600],
+                          '${_pendingRequests.length} pending request${_pendingRequests.length != 1 ? 's' : ''}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white.withOpacity(0.6)
+                                : const Color(0xFF6B7FA8),
                           ),
                         ),
                       ],
@@ -1102,30 +1562,40 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
                 child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(AppTheme.spacingXL),
+                      padding: const EdgeInsets.all(32),
                       decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(AppTheme.radiusXL),
+                        color: isDark
+                            ? Colors.white.withOpacity(0.03)
+                            : const Color(0xFFF8F9FA),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Icon(
-                        Icons.inbox,
+                        Icons.inbox_outlined,
                         size: 64,
-                        color: Colors.grey[400],
+                        color: isDark
+                            ? Colors.white.withOpacity(0.3)
+                            : const Color(0xFFB0BEC5),
                       ),
                     ),
-                    const SizedBox(height: AppTheme.spacingLG),
+                    const SizedBox(height: 20),
                     Text(
                       'No pending requests',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w600,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? Colors.white.withOpacity(0.6)
+                            : const Color(0xFF6B7FA8),
                       ),
                     ),
-                    const SizedBox(height: AppTheme.spacingSM),
+                    const SizedBox(height: 8),
                     Text(
-                      'New booking requests from students will appear here',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[500],
+                      'New booking requests from students\nwill appear here',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? Colors.white.withOpacity(0.4)
+                            : const Color(0xFF90A4AE),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -1133,14 +1603,14 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
                 ),
               )
             else
-              ..._pendingRequests.map((request) => _buildRequestCard(request)),
+              ..._pendingRequests.map((request) => _buildRequestCard(request, isDark)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSessionCard(AvailabilitySlot session) {
+  Widget _buildSessionCard(AvailabilitySlot session, bool isDark) {
     final booking = session.booking!;
     final isToday = session.isToday;
     final isPast = session.isPast;
@@ -1417,7 +1887,7 @@ class _TutorScheduleScreenState extends State<TutorScheduleScreen>
     );
   }
 
-  Widget _buildRequestCard(BookingRequest request) {
+  Widget _buildRequestCard(BookingRequest request, bool isDark) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
       elevation: 3,

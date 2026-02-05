@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:math' as math;
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/booking_service.dart';
@@ -15,7 +16,8 @@ class TutorDashboardScreen extends StatefulWidget {
   State<TutorDashboardScreen> createState() => _TutorDashboardScreenState();
 }
 
-class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
+class _TutorDashboardScreenState extends State<TutorDashboardScreen>
+    with SingleTickerProviderStateMixin {
   final BookingService _bookingService = BookingService();
   final ProfileService _profileService = ProfileService();
   final NotificationService _notificationService = NotificationService();
@@ -31,14 +33,17 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
   double _thisMonthEarnings = 0.0;
   double _rating = 0.0;
   int _totalStudents = 0;
+  
+  AnimationController? _fadeController;
+  Animation<double>? _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
     _loadDashboardData();
     _loadUnreadCount();
     
-    // Listen to notification count updates
     _notificationService.notificationCountStream.listen((count) {
       if (mounted) {
         setState(() {
@@ -46,6 +51,23 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
         });
       }
     });
+  }
+
+  void _initializeAnimations() {
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fadeController!,
+      curve: Curves.easeIn,
+    ));
+    
+    _fadeController?.forward();
   }
 
   Future<void> _loadUnreadCount() async {
@@ -69,7 +91,6 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
     setState(() => _isLoadingStats = true);
     
     try {
-      // Load tutor profile for rating
       final profileResponse = await _profileService.getTutorProfile();
       if (profileResponse.success && profileResponse.data != null) {
         final profile = profileResponse.data!;
@@ -78,12 +99,10 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
         });
       }
       
-      // Load all bookings to calculate stats
       final bookingsResponse = await _bookingService.getBookings();
       if (bookingsResponse.success && bookingsResponse.data != null) {
         final bookings = bookingsResponse.data!;
         
-        // Calculate today's sessions
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
         _todaysSessions = bookings.where((booking) {
@@ -93,7 +112,6 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
           return sessionDay == today && booking['status'] == 'confirmed';
         }).length;
         
-        // Calculate this month's earnings
         final firstDayOfMonth = DateTime(now.year, now.month, 1);
         _thisMonthEarnings = bookings.where((booking) {
           final sessionDate = DateTime.tryParse(booking['sessionDate'] ?? '');
@@ -105,7 +123,6 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
           return sum + (amount is int ? amount.toDouble() : (amount as num).toDouble());
         });
         
-        // Calculate total unique students
         final uniqueStudents = <String>{};
         for (var booking in bookings) {
           final studentId = booking['studentId'];
@@ -128,33 +145,54 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
     setState(() => _isLoadingSessions = true);
     
     try {
-      // Get confirmed bookings
+      // Fetch confirmed bookings
       final response = await _bookingService.getBookings(status: 'confirmed');
       
       if (response.success && response.data != null) {
         final bookings = response.data!;
         
-        // Filter for upcoming sessions (future dates)
         final now = DateTime.now();
         final upcoming = bookings.where((booking) {
-          final sessionDate = DateTime.tryParse(booking['sessionDate'] ?? '');
-          return sessionDate != null && sessionDate.isAfter(now);
+          final sessionDate = DateTime.tryParse(booking['sessionDate'] ?? booking['date'] ?? '');
+          if (sessionDate == null) return false;
+          
+          // Parse start time to get exact session datetime
+          final startTime = booking['startTime'] ?? booking['time']?.toString().split(' - ')[0];
+          if (startTime != null && startTime.isNotEmpty) {
+            try {
+              final timeParts = startTime.split(':');
+              final hour = int.parse(timeParts[0]);
+              final minute = int.parse(timeParts[1]);
+              final sessionDateTime = DateTime(
+                sessionDate.year,
+                sessionDate.month,
+                sessionDate.day,
+                hour,
+                minute,
+              );
+              return sessionDateTime.isAfter(now);
+            } catch (e) {
+              // If time parsing fails, just check date
+              return sessionDate.isAfter(now);
+            }
+          }
+          
+          return sessionDate.isAfter(now);
         }).toList();
         
-        // Sort by date (earliest first)
+        // Sort by date and time
         upcoming.sort((a, b) {
-          final dateA = DateTime.tryParse(a['sessionDate'] ?? '') ?? DateTime.now();
-          final dateB = DateTime.tryParse(b['sessionDate'] ?? '') ?? DateTime.now();
+          final dateA = DateTime.tryParse(a['sessionDate'] ?? a['date'] ?? '') ?? DateTime.now();
+          final dateB = DateTime.tryParse(b['sessionDate'] ?? b['date'] ?? '') ?? DateTime.now();
           return dateA.compareTo(dateB);
         });
         
-        // Take only first 5
         setState(() {
           _upcomingSessions = upcoming.take(5).toList();
         });
       }
     } catch (e) {
-      print('Error loading upcoming sessions: $e');
+      print('❌ Error loading upcoming sessions: $e');
     } finally {
       setState(() => _isLoadingSessions = false);
     }
@@ -164,13 +202,10 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
     setState(() => _isLoadingActivity = true);
     
     try {
-      // Get all recent bookings (last 10)
       final response = await _bookingService.getBookings();
       
       if (response.success && response.data != null) {
         final bookings = response.data!;
-        
-        // Convert bookings to activity items
         final activities = <Map<String, dynamic>>[];
         
         for (var booking in bookings.take(10)) {
@@ -185,7 +220,7 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
               'message': 'New booking request from $studentName',
               'time': timeAgo,
               'icon': Icons.book_online,
-              'color': Colors.blue,
+              'color': const Color(0xFF6B7FA8),
               'bookingId': booking['id'],
             });
           } else if (status == 'confirmed') {
@@ -194,7 +229,7 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
               'message': 'Booking confirmed with $studentName',
               'time': timeAgo,
               'icon': Icons.check_circle,
-              'color': Colors.green,
+              'color': const Color(0xFF7FA87F),
               'bookingId': booking['id'],
             });
           } else if (status == 'completed') {
@@ -203,7 +238,7 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
               'message': 'Session completed with $studentName',
               'time': timeAgo,
               'icon': Icons.done_all,
-              'color': Colors.teal,
+              'color': const Color(0xFF8B9DC3),
               'bookingId': booking['id'],
             });
           }
@@ -251,42 +286,277 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
       return '${date.month}/${date.day}/${date.year}';
     }
   }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
         final user = authProvider.user;
         
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Tutor Dashboard'),
-            backgroundColor: AppTheme.primaryColor,
-            foregroundColor: Colors.white,
-            actions: [
-              IconButton(
-                onPressed: () => context.push('/tutor-notifications'),
-                icon: Stack(
+          extendBodyBehindAppBar: true,
+          appBar: _buildModernAppBar(isDark),
+          body: Stack(
+            children: [
+              _buildElegantBackground(isDark),
+              
+              SafeArea(
+                child: RefreshIndicator(
+                  onRefresh: _loadDashboardData,
+                  color: isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(AppTheme.spacingLG),
+                    child: FadeTransition(
+                      opacity: _fadeAnimation ?? const AlwaysStoppedAnimation(1.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildProfessionalWelcomeCard(user, isDark),
+                          const SizedBox(height: AppTheme.spacingXL),
+                          _buildStatsGrid(isDark),
+                          const SizedBox(height: AppTheme.spacingXL),
+                          _buildSectionHeader('Upcoming Sessions', isDark),
+                          const SizedBox(height: AppTheme.spacingLG),
+                          _buildUpcomingSessionsList(isDark),
+                          const SizedBox(height: AppTheme.spacingXL),
+                          _buildSectionHeader('Recent Activity', isDark),
+                          const SizedBox(height: AppTheme.spacingLG),
+                          _buildRecentActivity(isDark),
+                          const SizedBox(height: AppTheme.spacingXL),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          bottomNavigationBar: _buildModernBottomNav(context, isDark),
+        );
+      },
+    );
+  }
+
+  Widget _buildModernBottomNav(BuildContext context, bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: isDark
+              ? [
+                  const Color(0xFF1A1A2E).withOpacity(0.95),
+                  const Color(0xFF1A1A2E),
+                ]
+              : [
+                  Colors.white.withOpacity(0.95),
+                  Colors.white,
+                ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withOpacity(0.3)
+                : const Color(0xFF6B7FA8).withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
+        border: Border(
+          top: BorderSide(
+            color: isDark
+                ? Colors.white.withOpacity(0.05)
+                : const Color(0xFFE0E0E0),
+            width: 1,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(
+                context: context,
+                icon: Icons.home_outlined,
+                activeIcon: Icons.home_rounded,
+                label: 'Home',
+                isActive: true,
+                isDark: isDark,
+                onTap: () {},
+              ),
+              _buildNavItem(
+                context: context,
+                icon: Icons.calendar_month_outlined,
+                activeIcon: Icons.calendar_month_rounded,
+                label: 'Schedule',
+                isActive: false,
+                isDark: isDark,
+                onTap: () => context.push('/tutor-schedule'),
+              ),
+              _buildNavItem(
+                context: context,
+                icon: Icons.book_outlined,
+                activeIcon: Icons.book_rounded,
+                label: 'Bookings',
+                isActive: false,
+                isDark: isDark,
+                onTap: () => context.push('/tutor-bookings'),
+              ),
+              _buildNavItem(
+                context: context,
+                icon: Icons.chat_bubble_outline,
+                activeIcon: Icons.chat_bubble_rounded,
+                label: 'Messages',
+                isActive: false,
+                isDark: isDark,
+                onTap: () => context.push('/tutor-messages'),
+              ),
+              _buildNavItem(
+                context: context,
+                icon: Icons.person_outline,
+                activeIcon: Icons.person_rounded,
+                label: 'Profile',
+                isActive: false,
+                isDark: isDark,
+                onTap: () => context.push('/tutor-profile'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem({
+    required BuildContext context,
+    required IconData icon,
+    required IconData activeIcon,
+    required String label,
+    required bool isActive,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    final activeColor = isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8);
+    final inactiveColor = isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF90A4AE);
+
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? activeColor.withOpacity(0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    isActive ? activeIcon : icon,
+                    color: isActive ? activeColor : inactiveColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    color: isActive ? activeColor : inactiveColor,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildModernAppBar(bool isDark) {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      title: ShaderMask(
+        shaderCallback: (bounds) => LinearGradient(
+          colors: isDark 
+              ? [const Color(0xFFE8EAF6), const Color(0xFFC5CAE9)]
+              : [const Color(0xFF5F6F94), const Color(0xFF8B9DC3)],
+        ).createShader(bounds),
+        child: const Text(
+          'Dashboard',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+        ),
+      ),
+      actions: [
+        Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withOpacity(0.08)
+                : Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => context.push('/tutor-notifications'),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Stack(
                   children: [
-                    const Icon(Icons.notifications),
+                    Icon(
+                      Icons.notifications_outlined,
+                      color: isDark ? Colors.white70 : const Color(0xFF5F6F94),
+                    ),
                     if (_unreadCount > 0)
                       Positioned(
                         right: 0,
                         top: 0,
                         child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(6),
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFFB39DDB), Color(0xFF9FA8DA)],
+                            ),
+                            shape: BoxShape.circle,
                           ),
                           constraints: const BoxConstraints(
-                            minWidth: 12,
-                            minHeight: 12,
+                            minWidth: 16,
+                            minHeight: 16,
                           ),
                           child: Text(
                             _unreadCount > 99 ? '99+' : '$_unreadCount',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 8,
+                              fontWeight: FontWeight.bold,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -295,236 +565,126 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
                   ],
                 ),
               ),
-              TextButton(
-                onPressed: () async {
-                  await authProvider.logout();
-                },
-                child: const Text(
-                  'Logout',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppTheme.spacingLG),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Welcome Section
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppTheme.spacingLG),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusLG),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Welcome back,',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Colors.white70,
-                        ),
-                      ),
-                      const SizedBox(height: AppTheme.spacingXS),
-                      Text(
-                        user?.fullName ?? 'Tutor',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: AppTheme.spacingSM),
-                      Text(
-                        'Ready to inspire and teach students today?',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: AppTheme.spacingXL),
-                
-                // Quick Stats
-                Row(
-                  children: [
-                    Expanded(child: _buildStatCard(
-                      'Today\'s Sessions', 
-                      _isLoadingStats ? '...' : '$_todaysSessions', 
-                      Icons.today, 
-                      Colors.blue
-                    )),
-                    const SizedBox(width: AppTheme.spacingMD),
-                    Expanded(child: _buildStatCard(
-                      'This Month', 
-                      _isLoadingStats ? '...' : '\$${_thisMonthEarnings.toStringAsFixed(0)}', 
-                      Icons.attach_money, 
-                      Colors.green
-                    )),
-                  ],
-                ),
-                
-                const SizedBox(height: AppTheme.spacingMD),
-                
-                Row(
-                  children: [
-                    Expanded(child: _buildStatCard(
-                      'Rating', 
-                      _isLoadingStats ? '...' : _rating > 0 ? _rating.toStringAsFixed(1) : 'N/A', 
-                      Icons.star, 
-                      Colors.amber
-                    )),
-                    const SizedBox(width: AppTheme.spacingMD),
-                    Expanded(child: _buildStatCard(
-                      'Total Students', 
-                      _isLoadingStats ? '...' : '$_totalStudents', 
-                      Icons.people, 
-                      Colors.purple
-                    )),
-                  ],
-                ),
-                
-                const SizedBox(height: AppTheme.spacingXL),
-                
-                // Quick Actions
-                Text(
-                  'Quick Actions',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                
-                const SizedBox(height: AppTheme.spacingLG),
-                
-                // Action Cards
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: AppTheme.spacingMD,
-                  mainAxisSpacing: AppTheme.spacingMD,
-                  childAspectRatio: 1.2,
-                  children: [
-                    _buildActionCard(
-                      context,
-                      icon: Icons.calendar_today,
-                      title: 'My Schedule',
-                      subtitle: 'Manage availability',
-                      onTap: () => context.push('/tutor-schedule'),
-                    ),
-                    _buildActionCard(
-                      context,
-                      icon: Icons.book_online,
-                      title: 'Bookings',
-                      subtitle: 'View & manage',
-                      onTap: () => context.push('/tutor-bookings'),
-                    ),
-                    _buildActionCard(
-                      context,
-                      icon: Icons.person,
-                      title: 'My Profile',
-                      subtitle: 'Edit profile',
-                      onTap: () => context.push('/tutor-profile'),
-                    ),
-                    _buildActionCard(
-                      context,
-                      icon: Icons.analytics,
-                      title: 'Earnings',
-                      subtitle: 'Track income',
-                      onTap: () => context.push('/tutor-earnings'),
-                    ),
-                    _buildActionCard(
-                      context,
-                      icon: Icons.chat,
-                      title: 'Messages',
-                      subtitle: 'Chat with students',
-                      onTap: () => context.push('/tutor-messages'),
-                    ),
-                    _buildActionCard(
-                      context,
-                      icon: Icons.reviews,
-                      title: 'Reviews',
-                      subtitle: 'Student feedback',
-                      onTap: () => context.push('/tutor-reviews'),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: AppTheme.spacingXL),
-                
-                // Upcoming Sessions
-                Text(
-                  'Upcoming Sessions',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                
-                const SizedBox(height: AppTheme.spacingLG),
-                
-                _buildUpcomingSessionsList(),
-                
-                const SizedBox(height: AppTheme.spacingXL),
-                
-                // Recent Activity
-                Text(
-                  'Recent Activity',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                
-                const SizedBox(height: AppTheme.spacingLG),
-                
-                _buildRecentActivity(),
-              ],
             ),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildElegantBackground(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(AppTheme.spacingLG),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLG),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  const Color(0xFF1A1A2E),
+                  const Color(0xFF16213E),
+                  const Color(0xFF0F3460),
+                ]
+              : [
+                  const Color(0xFFF5F7FA),
+                  const Color(0xFFECEFF4),
+                  const Color(0xFFE8EAF6),
+                ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfessionalWelcomeCard(user, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  const Color(0xFF5F6F94),
+                  const Color(0xFF6B7FA8),
+                  const Color(0xFF8B9DC3),
+                ]
+              : [
+                  const Color(0xFFFFFFFF),
+                  const Color(0xFFF8F9FA),
+                  const Color(0xFFF5F7FA),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.1)
+              : const Color(0xFFE0E0E0),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: isDark
+                ? Colors.black.withOpacity(0.3)
+                : const Color(0xFF5F6F94).withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(icon, color: color, size: 24),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppTheme.spacingSM),
           Text(
-            title,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey[600],
+            'Welcome back,',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: isDark
+                  ? Colors.white.withOpacity(0.7)
+                  : const Color(0xFF6B7FA8),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            user?.fullName ?? 'Tutor',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: isDark ? Colors.white : const Color(0xFF2C3E50),
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : const Color(0xFF8B9DC3).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 16,
+                  color: isDark
+                      ? Colors.white70
+                      : const Color(0xFF6B7FA8),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Ready to inspire students today',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark
+                        ? Colors.white70
+                        : const Color(0xFF6B7FA8),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -532,227 +692,484 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen> {
     );
   }
 
-  Widget _buildActionCard(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLG),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLG),
-        child: Padding(
-          padding: const EdgeInsets.all(AppTheme.spacingSM),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 24,
-                color: AppTheme.primaryColor,
-              ),
-              const SizedBox(height: AppTheme.spacingXS),
-              Flexible(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Flexible(
-                child: Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                    fontSize: 10,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
+  Widget _buildSectionHeader(String title, bool isDark) {
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w900,
+        color: isDark ? Colors.white : const Color(0xFF2C3E50),
+        letterSpacing: -0.5,
       ),
     );
   }
 
-  Widget _buildUpcomingSessionsList() {
+  Widget _buildStatsGrid(bool isDark) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 1.6,
+      children: [
+        _buildStatCard(
+          'Today\'s Sessions',
+          _isLoadingStats ? '...' : '$_todaysSessions',
+          Icons.today_outlined,
+          const Color(0xFF6B7FA8),
+          isDark,
+        ),
+        _buildStatCard(
+          'This Month',
+          _isLoadingStats ? '...' : '\$${_thisMonthEarnings.toStringAsFixed(0)}',
+          Icons.attach_money_outlined,
+          const Color(0xFF7FA87F),
+          isDark,
+        ),
+        _buildStatCard(
+          'Rating',
+          _isLoadingStats ? '...' : _rating > 0 ? _rating.toStringAsFixed(1) : 'N/A',
+          Icons.star_outline,
+          const Color(0xFFD4A574),
+          isDark,
+        ),
+        _buildStatCard(
+          'Total Students',
+          _isLoadingStats ? '...' : '$_totalStudents',
+          Icons.people_outline,
+          const Color(0xFF8B9DC3),
+          isDark,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color accentColor, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : const Color(0xFFE0E0E0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withOpacity(0.2)
+                : accentColor.withOpacity(0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: accentColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              color: accentColor,
+              size: 18,
+            ),
+          ),
+          const Spacer(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? Colors.white : const Color(0xFF2C3E50),
+                  letterSpacing: -0.5,
+                  height: 1.0,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: isDark
+                      ? Colors.white.withOpacity(0.6)
+                      : const Color(0xFF6B7FA8),
+                  height: 1.2,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+
+
+  Widget _buildUpcomingSessionsList(bool isDark) {
     if (_isLoadingSessions) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(AppTheme.spacingXL),
-          child: CircularProgressIndicator(),
+          padding: const EdgeInsets.all(32),
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
+            ),
+          ),
         ),
       );
     }
 
     if (_upcomingSessions.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(AppTheme.spacingXL),
-          child: Column(
-            children: [
-              Icon(
-                Icons.event_busy,
-                size: 48,
-                color: Colors.grey[400],
-              ),
-              const SizedBox(height: AppTheme.spacingMD),
-              Text(
-                'No upcoming sessions',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: AppTheme.spacingSM),
-              Text(
-                'Your confirmed sessions will appear here',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[500],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+      return Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withOpacity(0.05)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withOpacity(0.08)
+                : const Color(0xFFE0E0E0),
           ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.event_busy_outlined,
+              size: 48,
+              color: isDark
+                  ? Colors.white.withOpacity(0.3)
+                  : const Color(0xFFB0BEC5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No upcoming sessions',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDark
+                    ? Colors.white.withOpacity(0.6)
+                    : const Color(0xFF6B7FA8),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your confirmed sessions will appear here',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark
+                    ? Colors.white.withOpacity(0.4)
+                    : const Color(0xFF90A4AE),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       );
     }
 
     return Column(
       children: _upcomingSessions.map((session) {
-        final sessionDate = DateTime.tryParse(session['sessionDate'] ?? '');
+        final sessionDate = DateTime.tryParse(session['sessionDate'] ?? session['date'] ?? '');
         final studentName = session['studentName'] ?? 'Student';
-        final subject = session['subject'] ?? 'Session';
-        final startTime = session['startTime'] ?? '';
-        final endTime = session['endTime'] ?? '';
-        final mode = session['mode'] ?? session['sessionType'] ?? 'Online';
-        final status = session['status'] ?? 'confirmed';
         
-        return Card(
-          margin: const EdgeInsets.only(bottom: AppTheme.spacingSM),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-              child: Text(
-                studentName.split(' ').map((n) => n.isNotEmpty ? n[0] : '').join(),
-                style: TextStyle(
-                  color: AppTheme.primaryColor,
-                  fontWeight: FontWeight.bold,
+        // Handle subject - can be string or object with name field
+        String subject = 'Session';
+        if (session['subject'] is String) {
+          subject = session['subject'];
+        } else if (session['subject'] is Map && session['subject']['name'] != null) {
+          subject = session['subject']['name'];
+        }
+        
+        // Handle time - can be in different formats
+        String startTime = '';
+        String endTime = '';
+        if (session['startTime'] != null) {
+          startTime = session['startTime'];
+          endTime = session['endTime'] ?? '';
+        } else if (session['time'] != null) {
+          final timeParts = session['time'].toString().split(' - ');
+          startTime = timeParts.isNotEmpty ? timeParts[0] : '';
+          endTime = timeParts.length > 1 ? timeParts[1] : '';
+        }
+        
+        final mode = session['mode'] ?? session['sessionType'] ?? 'Online';
+        final displayMode = mode == 'online' || mode == 'Online' ? 'Online' : 'In-Person';
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : const Color(0xFFE0E0E0),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withOpacity(0.2)
+                    : const Color(0xFF6B7FA8).withOpacity(0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF6B7FA8).withOpacity(0.2),
+                      const Color(0xFF8B9DC3).withOpacity(0.2),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    studentName.split(' ').map((n) => n.isNotEmpty ? n[0] : '').join(),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF6B7FA8),
+                    ),
+                  ),
                 ),
               ),
-            ),
-            title: Text(studentName),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$subject • $mode'),
-                if (sessionDate != null)
-                  Text('${_formatDate(sessionDate)} • $startTime - $endTime'),
-              ],
-            ),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingSM,
-                vertical: AppTheme.spacingXS,
-              ),
-              decoration: BoxDecoration(
-                color: status == 'confirmed' 
-                    ? Colors.green.withOpacity(0.1)
-                    : Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(AppTheme.radiusSM),
-              ),
-              child: Text(
-                status == 'confirmed' ? 'Confirmed' : 'Pending',
-                style: TextStyle(
-                  color: status == 'confirmed' ? Colors.green : Colors.orange,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      studentName,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : const Color(0xFF2C3E50),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$subject • $displayMode',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? Colors.white.withOpacity(0.6)
+                            : const Color(0xFF6B7FA8),
+                      ),
+                    ),
+                    if (sessionDate != null && startTime.isNotEmpty)
+                      Text(
+                        '${_formatDate(sessionDate)} • $startTime${endTime.isNotEmpty ? ' - $endTime' : ''}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? Colors.white.withOpacity(0.5)
+                              : const Color(0xFF90A4AE),
+                        ),
+                      )
+                    else if (sessionDate != null)
+                      Text(
+                        _formatDate(sessionDate),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? Colors.white.withOpacity(0.5)
+                              : const Color(0xFF90A4AE),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            ),
-            onTap: () {
-              context.push('/tutor-bookings');
-            },
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7FA87F).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Confirmed',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF7FA87F),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       }).toList(),
     );
   }
 
-  Widget _buildRecentActivity() {
+  Widget _buildRecentActivity(bool isDark) {
     if (_isLoadingActivity) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(AppTheme.spacingXL),
-          child: CircularProgressIndicator(),
+          padding: const EdgeInsets.all(32),
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
+            ),
+          ),
         ),
       );
     }
 
     if (_recentActivity.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(AppTheme.spacingXL),
-          child: Column(
-            children: [
-              Icon(
-                Icons.history,
-                size: 48,
-                color: Colors.grey[400],
-              ),
-              const SizedBox(height: AppTheme.spacingMD),
-              Text(
-                'No recent activity',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: AppTheme.spacingSM),
-              Text(
-                'Your recent bookings and activities will appear here',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[500],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+      return Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withOpacity(0.05)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withOpacity(0.08)
+                : const Color(0xFFE0E0E0),
           ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.history,
+              size: 48,
+              color: isDark
+                  ? Colors.white.withOpacity(0.3)
+                  : const Color(0xFFB0BEC5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No recent activity',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDark
+                    ? Colors.white.withOpacity(0.6)
+                    : const Color(0xFF6B7FA8),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your recent bookings will appear here',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark
+                    ? Colors.white.withOpacity(0.4)
+                    : const Color(0xFF90A4AE),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       );
     }
 
     return Column(
-      children: _recentActivity.map((activity) => ListTile(
-        leading: CircleAvatar(
-          backgroundColor: (activity['color'] as Color).withOpacity(0.1),
-          child: Icon(
-            activity['icon'] as IconData,
-            color: activity['color'] as Color,
-            size: 20,
+      children: _recentActivity.map((activity) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : const Color(0xFFE0E0E0),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withOpacity(0.2)
+                    : (activity['color'] as Color).withOpacity(0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ),
-        title: Text(activity['message'] as String),
-        subtitle: Text(activity['time'] as String),
-        onTap: () {
-          // Navigate to bookings screen
-          context.push('/tutor-bookings');
-        },
-      )).toList(),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: (activity['color'] as Color).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  activity['icon'] as IconData,
+                  color: activity['color'] as Color,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      activity['message'] as String,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : const Color(0xFF2C3E50),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      activity['time'] as String,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? Colors.white.withOpacity(0.5)
+                            : const Color(0xFF90A4AE),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
+  }
+
+  @override
+  void dispose() {
+    _fadeController?.dispose();
+    super.dispose();
   }
 }

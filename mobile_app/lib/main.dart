@@ -15,6 +15,7 @@ import 'core/services/call_service.dart';
 
 // Providers
 import 'features/auth/providers/auth_provider.dart';
+import 'core/providers/theme_provider.dart';
 
 // Call screens
 import 'features/call/screens/incoming_call_screen.dart';
@@ -158,15 +159,16 @@ class _TutorBookingAppState extends State<TutorBookingApp> {
       providers: [
         // Core providers
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: Consumer<AuthProvider>(
-        builder: (context, authProvider, _) {
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
           return MaterialApp.router(
             title: 'Tutor Booking App',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
-            themeMode: ThemeMode.system,
+            themeMode: themeProvider.themeMode,
             routerConfig: AppRouter.router,
             builder: (context, child) {
               return MediaQuery(

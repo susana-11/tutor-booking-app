@@ -160,37 +160,81 @@ class _TutorProfileScreenState extends State<TutorProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('My Profile'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            onPressed: _loadTutorData,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Profile',
+        elevation: 0,
+        backgroundColor: isDark ? const Color(0xFF16213E) : Colors.white,
+        title: ShaderMask(
+          shaderCallback: (bounds) => LinearGradient(
+            colors: isDark 
+                ? [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)]
+                : [const Color(0xFF0F3460), const Color(0xFF16213E)],
+          ).createShader(bounds),
+          child: const Text(
+            'My Profile',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              color: Colors.white,
+            ),
           ),
-          TextButton(
-            onPressed: _isSaving ? null : _saveProfile,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: isDark 
+                  ? const Color(0xFF6B7FA8).withOpacity(0.2)
+                  : const Color(0xFFF5F7FA),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              onPressed: _loadTutorData,
+              icon: Icon(
+                Icons.refresh_rounded,
+                color: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+              ),
+              tooltip: 'Refresh Profile',
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            child: TextButton(
+              onPressed: _isSaving ? null : _saveProfile,
+              child: _isSaving
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                        ),
+                      ),
+                    )
+                  : Text(
+                      'Save',
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                  )
-                : const Text(
-                    'Save',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
+            ),
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                ),
+              ),
+            )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(AppTheme.spacingLG),
               child: Form(
@@ -209,29 +253,54 @@ class _TutorProfileScreenState extends State<TutorProfileScreen> {
                             final user = authProvider.user;
                             final profilePicture = user?.profilePicture;
                             
-                            return CircleAvatar(
-                              radius: 50,
-                              backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-                              backgroundImage: profilePicture != null && profilePicture.isNotEmpty
-                                  ? NetworkImage(profilePicture)
-                                  : null,
-                              onBackgroundImageError: profilePicture != null
-                                  ? (exception, stackTrace) {
-                                      print('Error loading profile picture: $exception');
-                                    }
-                                  : null,
-                              child: _isUploadingImage
-                                  ? const CircularProgressIndicator()
-                                  : (profilePicture == null || profilePicture.isEmpty)
-                                      ? Text(
-                                          user?.fullName.split(' ').map((n) => n[0]).join() ?? 'T',
-                                          style: TextStyle(
-                                            fontSize: 32,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppTheme.primaryColor,
-                                          ),
-                                        )
-                                      : null,
+                            return Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: isDark
+                                      ? [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)]
+                                      : [const Color(0xFF0F3460), const Color(0xFF16213E)],
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460))
+                                        .withOpacity(0.3),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              padding: const EdgeInsets.all(3),
+                              child: CircleAvatar(
+                                radius: 50,
+                                backgroundColor: isDark
+                                    ? const Color(0xFF16213E)
+                                    : Colors.white,
+                                backgroundImage: profilePicture != null && profilePicture.isNotEmpty
+                                    ? NetworkImage(profilePicture)
+                                    : null,
+                                onBackgroundImageError: profilePicture != null
+                                    ? (exception, stackTrace) {
+                                        print('Error loading profile picture: $exception');
+                                      }
+                                    : null,
+                                child: _isUploadingImage
+                                    ? CircularProgressIndicator(
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                                        ),
+                                      )
+                                    : (profilePicture == null || profilePicture.isEmpty)
+                                        ? Text(
+                                            user?.fullName.split(' ').map((n) => n[0]).join() ?? 'T',
+                                            style: TextStyle(
+                                              fontSize: 32,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                                            ),
+                                          )
+                                        : null,
+                              ),
                             );
                           },
                         ),
@@ -240,13 +309,28 @@ class _TutorProfileScreenState extends State<TutorProfileScreen> {
                           right: 0,
                           child: Container(
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryColor,
+                              gradient: LinearGradient(
+                                colors: isDark
+                                    ? [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)]
+                                    : [const Color(0xFF0F3460), const Color(0xFF16213E)],
+                              ),
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+                              border: Border.all(
+                                color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                                width: 3,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460))
+                                      .withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
                             child: IconButton(
                               onPressed: _isUploadingImage ? null : _changeProfilePicture,
-                              icon: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                              icon: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
                               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                             ),
                           ),
@@ -261,29 +345,49 @@ class _TutorProfileScreenState extends State<TutorProfileScreen> {
                           children: [
                             Text(
                               user?.email ?? '',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Colors.grey[600],
+                              style: TextStyle(
+                                color: isDark 
+                                    ? Colors.white.withOpacity(0.7)
+                                    : const Color(0xFF6B7FA8),
+                                fontSize: 14,
                               ),
                             ),
                             const SizedBox(height: AppTheme.spacingSM),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.star,
-                                  color: Colors.amber,
-                                  size: 20,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.amber.withOpacity(0.2),
+                                    Colors.orange.withOpacity(0.2),
+                                  ],
                                 ),
-                                const SizedBox(width: AppTheme.spacingXS),
-                                Text(
-                                  _totalReviews > 0 
-                                      ? '${_actualRating.toStringAsFixed(1)} ($_totalReviews reviews)'
-                                      : 'No reviews yet',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w500,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.amber.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.star_rounded,
+                                    color: Colors.amber,
+                                    size: 20,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: AppTheme.spacingXS),
+                                  Text(
+                                    _totalReviews > 0 
+                                        ? '${_actualRating.toStringAsFixed(1)} ($_totalReviews reviews)'
+                                        : 'No reviews yet',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.white : const Color(0xFF0F3460),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         );
@@ -296,35 +400,82 @@ class _TutorProfileScreenState extends State<TutorProfileScreen> {
               const SizedBox(height: AppTheme.spacingXL),
               
               // Profile Visibility Settings
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppTheme.spacingLG),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Profile Settings',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? [const Color(0xFF16213E), const Color(0xFF0F3460).withOpacity(0.8)]
+                        : [Colors.white, const Color(0xFFF5F7FA)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withOpacity(0.3)
+                          : Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(AppTheme.spacingLG),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Profile Settings',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF0F3460),
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.spacingMD),
+                    SwitchListTile(
+                      title: Text(
+                        'Profile Visible',
+                        style: TextStyle(
+                          color: isDark ? Colors.white : const Color(0xFF0F3460),
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(height: AppTheme.spacingMD),
-                      SwitchListTile(
-                        title: const Text('Profile Visible'),
-                        subtitle: const Text('Students can find and view your profile'),
-                        value: _profileVisible,
-                        onChanged: (value) => _toggleProfileVisibility(value),
-                        contentPadding: EdgeInsets.zero,
+                      subtitle: Text(
+                        'Students can find and view your profile',
+                        style: TextStyle(
+                          color: isDark 
+                              ? Colors.white.withOpacity(0.6)
+                              : const Color(0xFF6B7FA8),
+                        ),
                       ),
-                      SwitchListTile(
-                        title: const Text('Accepting Bookings'),
-                        subtitle: const Text('Students can book sessions with you'),
-                        value: _acceptingBookings,
-                        onChanged: (value) => _toggleAcceptingBookings(value),
-                        contentPadding: EdgeInsets.zero,
+                      value: _profileVisible,
+                      onChanged: (value) => _toggleProfileVisibility(value),
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                    ),
+                    SwitchListTile(
+                      title: Text(
+                        'Accepting Bookings',
+                        style: TextStyle(
+                          color: isDark ? Colors.white : const Color(0xFF0F3460),
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ],
-                  ),
+                      subtitle: Text(
+                        'Students can book sessions with you',
+                        style: TextStyle(
+                          color: isDark 
+                              ? Colors.white.withOpacity(0.6)
+                              : const Color(0xFF6B7FA8),
+                        ),
+                      ),
+                      value: _acceptingBookings,
+                      onChanged: (value) => _toggleAcceptingBookings(value),
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: isDark ? const Color(0xFF6B7FA8) : const Color(0xFF0F3460),
+                    ),
+                  ],
                 ),
               ),
               
@@ -333,8 +484,10 @@ class _TutorProfileScreenState extends State<TutorProfileScreen> {
               // Personal Information
               Text(
                 'Personal Information',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                style: TextStyle(
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF0F3460),
                 ),
               ),
               

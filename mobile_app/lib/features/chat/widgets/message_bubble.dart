@@ -27,6 +27,8 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return GestureDetector(
       onLongPress: () => _showMessageOptions(context),
       child: Container(
@@ -62,7 +64,7 @@ class MessageBubble extends StatelessWidget {
                 crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
                   // Reply preview
-                  if (message.replyTo != null) _buildReplyPreview(),
+                  if (message.replyTo != null) _buildReplyPreview(isDark),
                   
                   // Main message bubble
                   Container(
@@ -74,11 +76,11 @@ class MessageBubble extends StatelessWidget {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: _getBubbleColor(),
+                      color: _getBubbleColor(isDark),
                       borderRadius: _getBorderRadius(),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
                           blurRadius: 5,
                           offset: const Offset(0, 2),
                         ),
@@ -102,11 +104,11 @@ class MessageBubble extends StatelessWidget {
                           ),
                         
                         // Message content
-                        _buildMessageContent(),
+                        _buildMessageContent(isDark),
                         
                         // Message metadata
                         const SizedBox(height: 4),
-                        _buildMessageMetadata(),
+                        _buildMessageMetadata(isDark),
                       ],
                     ),
                   ),
@@ -122,17 +124,19 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildReplyPreview() {
+  Widget _buildReplyPreview(bool isDark) {
     final replyTo = message.replyTo!;
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.grey[100],
         borderRadius: BorderRadius.circular(8),
         border: Border(
           left: BorderSide(
-            color: AppTheme.primaryColor,
+            color: const Color(0xFF6B46C1),
             width: 3,
           ),
         ),
@@ -143,7 +147,7 @@ class MessageBubble extends StatelessWidget {
           Text(
             replyTo.senderName,
             style: TextStyle(
-              color: AppTheme.primaryColor,
+              color: isDark ? const Color(0xFF38B2AC) : const Color(0xFF6B46C1),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -151,9 +155,11 @@ class MessageBubble extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             replyTo.content,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: Colors.grey,
+              color: isDark
+                  ? Colors.white.withOpacity(0.5)
+                  : Colors.grey[600],
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -163,19 +169,19 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildMessageContent() {
+  Widget _buildMessageContent(bool isDark) {
     switch (message.type) {
       case MessageType.text:
-        return _buildTextContent();
+        return _buildTextContent(isDark);
       case MessageType.image:
-        return _buildImageContent();
+        return _buildImageContent(isDark);
       case MessageType.document:
-        return _buildDocumentContent();
+        return _buildDocumentContent(isDark);
       case MessageType.audio:
       case MessageType.voice:
         return _buildAudioContent();
       case MessageType.video:
-        return _buildVideoContent();
+        return _buildVideoContent(isDark);
       case MessageType.system:
         return _buildSystemContent();
       case MessageType.booking:
@@ -183,23 +189,25 @@ class MessageBubble extends StatelessWidget {
       case MessageType.payment:
         return _buildPaymentContent();
       case MessageType.call:
-        return _buildCallContent();
+        return _buildCallContent(isDark);
       default:
-        return _buildTextContent();
+        return _buildTextContent(isDark);
     }
   }
 
-  Widget _buildTextContent() {
+  Widget _buildTextContent(bool isDark) {
     return SelectableText(
       message.content,
       style: TextStyle(
-        color: isMe ? Colors.white : Colors.black87,
+        color: isMe 
+            ? Colors.white 
+            : (isDark ? Colors.white.withOpacity(0.9) : Colors.black87),
         fontSize: 16,
       ),
     );
   }
 
-  Widget _buildImageContent() {
+  Widget _buildImageContent(bool isDark) {
     // Get image URL and convert to absolute URL
     final imageUrl = message.attachments.isNotEmpty 
         ? message.attachments.first.url 
@@ -225,7 +233,7 @@ class MessageBubble extends StatelessWidget {
                 return Container(
                   width: 200,
                   height: 200,
-                  color: Colors.grey[300],
+                  color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey[300],
                   child: Center(
                     child: CircularProgressIndicator(
                       value: loadingProgress.expectedTotalBytes != null
@@ -242,13 +250,23 @@ class MessageBubble extends StatelessWidget {
                 return Container(
                   width: 200,
                   height: 200,
-                  color: Colors.grey[300],
-                  child: const Column(
+                  color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey[300],
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.broken_image, size: 50),
-                      SizedBox(height: 8),
-                      Text('Failed to load image', style: TextStyle(fontSize: 12)),
+                      Icon(
+                        Icons.broken_image,
+                        size: 50,
+                        color: isDark ? Colors.white.withOpacity(0.5) : Colors.grey[600],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Failed to load image',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white.withOpacity(0.5) : Colors.grey[600],
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -260,7 +278,9 @@ class MessageBubble extends StatelessWidget {
           Text(
             message.content,
             style: TextStyle(
-              color: isMe ? Colors.white : Colors.black87,
+              color: isMe 
+                  ? Colors.white 
+                  : (isDark ? Colors.white.withOpacity(0.9) : Colors.black87),
               fontSize: 16,
             ),
           ),
@@ -269,7 +289,7 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildDocumentContent() {
+  Widget _buildDocumentContent(bool isDark) {
     final attachment = message.attachments.isNotEmpty 
         ? message.attachments.first 
         : null;
@@ -277,7 +297,7 @@ class MessageBubble extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: (isMe ? Colors.white : Colors.grey[100])?.withOpacity(0.1),
+        color: (isMe ? Colors.white : (isDark ? Colors.white : Colors.grey[100]))?.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -285,7 +305,9 @@ class MessageBubble extends StatelessWidget {
         children: [
           Icon(
             _getDocumentIcon(attachment?.mimeType),
-            color: isMe ? Colors.white70 : Colors.grey[600],
+            color: isMe 
+                ? Colors.white70 
+                : (isDark ? Colors.white.withOpacity(0.7) : Colors.grey[600]),
             size: 32,
           ),
           const SizedBox(width: 12),
@@ -296,7 +318,9 @@ class MessageBubble extends StatelessWidget {
                 Text(
                   attachment?.name ?? 'Document',
                   style: TextStyle(
-                    color: isMe ? Colors.white : Colors.black87,
+                    color: isMe 
+                        ? Colors.white 
+                        : (isDark ? Colors.white.withOpacity(0.9) : Colors.black87),
                     fontWeight: FontWeight.w600,
                   ),
                   maxLines: 1,
@@ -306,7 +330,9 @@ class MessageBubble extends StatelessWidget {
                   Text(
                     _formatFileSize(attachment.size),
                     style: TextStyle(
-                      color: isMe ? Colors.white70 : Colors.grey[600],
+                      color: isMe 
+                          ? Colors.white70 
+                          : (isDark ? Colors.white.withOpacity(0.6) : Colors.grey[600]),
                       fontSize: 12,
                     ),
                   ),
@@ -316,7 +342,9 @@ class MessageBubble extends StatelessWidget {
           const SizedBox(width: 8),
           Icon(
             Icons.download,
-            color: isMe ? Colors.white70 : Colors.grey[600],
+            color: isMe 
+                ? Colors.white70 
+                : (isDark ? Colors.white.withOpacity(0.7) : Colors.grey[600]),
             size: 20,
           ),
         ],
@@ -356,7 +384,7 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildVideoContent() {
+  Widget _buildVideoContent(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -405,7 +433,9 @@ class MessageBubble extends StatelessWidget {
           Text(
             message.content,
             style: TextStyle(
-              color: isMe ? Colors.white : Colors.black87,
+              color: isMe 
+                  ? Colors.white 
+                  : (isDark ? Colors.white.withOpacity(0.9) : Colors.black87),
               fontSize: 16,
             ),
           ),
@@ -516,9 +546,9 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildCallContent() {
+  Widget _buildCallContent(bool isDark) {
     final callData = message.callData;
-    if (callData == null) return _buildTextContent();
+    if (callData == null) return _buildTextContent(isDark);
 
     final callType = callData['callType'] ?? 'voice';
     final status = callData['status'] ?? 'ended';
@@ -585,7 +615,9 @@ class MessageBubble extends StatelessWidget {
               Text(
                 callType == 'video' ? 'Video Call' : 'Voice Call',
                 style: TextStyle(
-                  color: isMe ? Colors.white : Colors.black87,
+                  color: isMe 
+                      ? Colors.white 
+                      : (isDark ? Colors.white.withOpacity(0.9) : Colors.black87),
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
@@ -594,7 +626,9 @@ class MessageBubble extends StatelessWidget {
               Text(
                 statusText,
                 style: TextStyle(
-                  color: isMe ? Colors.white70 : Colors.grey[600],
+                  color: isMe 
+                      ? Colors.white70 
+                      : (isDark ? Colors.white.withOpacity(0.6) : Colors.grey[600]),
                   fontSize: 12,
                 ),
               ),
@@ -605,7 +639,7 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildMessageMetadata() {
+  Widget _buildMessageMetadata(bool isDark) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -616,7 +650,9 @@ class MessageBubble extends StatelessWidget {
             child: Text(
               'edited',
               style: TextStyle(
-                color: isMe ? Colors.white60 : Colors.grey[500],
+                color: isMe 
+                    ? Colors.white60 
+                    : (isDark ? Colors.white.withOpacity(0.5) : Colors.grey[500]),
                 fontSize: 10,
                 fontStyle: FontStyle.italic,
               ),
@@ -627,7 +663,9 @@ class MessageBubble extends StatelessWidget {
         Text(
           _formatTimestamp(message.createdAt),
           style: TextStyle(
-            color: isMe ? Colors.white60 : Colors.grey[500],
+            color: isMe 
+                ? Colors.white60 
+                : (isDark ? Colors.white.withOpacity(0.5) : Colors.grey[500]),
             fontSize: 10,
           ),
         ),
@@ -671,11 +709,19 @@ class MessageBubble extends StatelessWidget {
     return Icon(icon, size: 12, color: color);
   }
 
-  Color _getBubbleColor() {
+  Color _getBubbleColor(bool isDark) {
     if (message.type == MessageType.system) {
       return Colors.transparent;
     }
-    return isMe ? AppTheme.primaryColor : Colors.grey[100]!;
+    if (isMe) {
+      // Sent messages: gradient color
+      return const Color(0xFF6B46C1);
+    } else {
+      // Received messages: different color for dark/light mode
+      return isDark 
+          ? Colors.white.withOpacity(0.1) 
+          : Colors.grey[100]!;
+    }
   }
 
   BorderRadius _getBorderRadius() {

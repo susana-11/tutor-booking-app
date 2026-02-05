@@ -330,6 +330,36 @@ class BookingRequest {
   bool get isDeclined => status == 'declined';
 
   factory BookingRequest.fromJson(Map<String, dynamic> json) {
+    // Handle subject - can be string or object with name field
+    String subjectName = '';
+    if (json['subject'] is String) {
+      subjectName = json['subject'];
+    } else if (json['subject'] is Map && json['subject']['name'] != null) {
+      subjectName = json['subject']['name'];
+    } else if (json['subjectName'] != null) {
+      subjectName = json['subjectName'];
+    }
+
+    // Handle timeSlot - create from startTime/endTime if timeSlot not present
+    TimeSlot timeSlot;
+    if (json['timeSlot'] != null) {
+      timeSlot = TimeSlot.fromJson(json['timeSlot']);
+    } else {
+      timeSlot = TimeSlot(
+        startTime: json['startTime'] ?? '',
+        endTime: json['endTime'] ?? '',
+        durationMinutes: json['duration'] ?? 60,
+      );
+    }
+
+    // Handle amount - can be amount or totalAmount
+    double amount = 0.0;
+    if (json['amount'] != null) {
+      amount = (json['amount'] is int) ? (json['amount'] as int).toDouble() : json['amount'];
+    } else if (json['totalAmount'] != null) {
+      amount = (json['totalAmount'] is int) ? (json['totalAmount'] as int).toDouble() : json['totalAmount'];
+    }
+
     return BookingRequest(
       id: json['id'] ?? json['_id'] ?? '',
       studentId: json['studentId'] ?? '',
@@ -338,10 +368,10 @@ class BookingRequest {
       studentPhone: json['studentPhone'],
       slotId: json['slotId'] ?? '',
       sessionDate: DateTime.parse(json['sessionDate']),
-      timeSlot: TimeSlot.fromJson(json['timeSlot']),
-      subject: json['subject'] ?? '',
+      timeSlot: timeSlot,
+      subject: subjectName,
       message: json['message'],
-      amount: (json['amount'] ?? 0).toDouble(),
+      amount: amount,
       status: json['status'] ?? 'pending',
       requestedAt: DateTime.parse(json['requestedAt']),
     );

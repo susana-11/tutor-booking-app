@@ -240,106 +240,239 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Bookings'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: 'Pending'),
-            Tab(text: 'Confirmed'),
-            Tab(text: 'Completed'),
-            Tab(text: 'Cancelled'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: _loadBookings,
-            icon: const Icon(Icons.refresh),
+      extendBodyBehindAppBar: true,
+      appBar: _buildModernAppBar(isDark),
+      body: Stack(
+        children: [
+          _buildElegantBackground(isDark),
+          
+          SafeArea(
+            child: _isLoading
+                ? Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
+                      ),
+                    ),
+                  )
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildPendingBookings(isDark),
+                      _buildConfirmedBookings(isDark),
+                      _buildCompletedBookings(isDark),
+                      _buildCancelledBookings(isDark),
+                    ],
+                  ),
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildPendingBookings(),
-                _buildConfirmedBookings(),
-                _buildCompletedBookings(),
-                _buildCancelledBookings(),
-              ],
-            ),
     );
   }
 
-  Widget _buildPendingBookings() {
+  PreferredSizeWidget _buildModernAppBar(bool isDark) {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      title: ShaderMask(
+        shaderCallback: (bounds) => LinearGradient(
+          colors: isDark 
+              ? [const Color(0xFFE8EAF6), const Color(0xFFC5CAE9)]
+              : [const Color(0xFF5F6F94), const Color(0xFF8B9DC3)],
+        ).createShader(bounds),
+        child: const Text(
+          'My Bookings',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+        ),
+      ),
+      actions: [
+        Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withOpacity(0.08)
+                : Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _loadBookings,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(
+                  Icons.refresh,
+                  color: isDark ? Colors.white70 : const Color(0xFF5F6F94),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(50),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white.withOpacity(0.7),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            indicator: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)]
+                    : [const Color(0xFF6B7FA8), const Color(0xFF8B9DC3)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            labelColor: Colors.white,
+            unselectedLabelColor: isDark ? Colors.white60 : const Color(0xFF6B7FA8),
+            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicatorPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            isScrollable: true,
+            tabs: [
+              Tab(
+                child: Row(
+                  children: [
+                    const Text('Pending'),
+                    if (_pendingBookings.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '${_pendingBookings.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Tab(text: 'Confirmed'),
+              const Tab(text: 'Completed'),
+              const Tab(text: 'Cancelled'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildElegantBackground(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  const Color(0xFF1A1A2E),
+                  const Color(0xFF16213E),
+                  const Color(0xFF0F3460),
+                ]
+              : [
+                  const Color(0xFFF5F7FA),
+                  const Color(0xFFECEFF4),
+                  const Color(0xFFE8EAF6),
+                ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPendingBookings(bool isDark) {
     if (_pendingBookings.isEmpty) {
-      return _buildEmptyState('No pending requests', 'New booking requests will appear here');
+      return _buildEmptyState('No pending requests', 'New booking requests will appear here', isDark);
     }
 
     return RefreshIndicator(
       onRefresh: _loadBookings,
+      color: isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
       child: ListView.builder(
         padding: const EdgeInsets.all(AppTheme.spacingLG),
         itemCount: _pendingBookings.length,
-        itemBuilder: (context, index) => _buildPendingBookingCard(_pendingBookings[index]),
+        itemBuilder: (context, index) => _buildPendingBookingCard(_pendingBookings[index], isDark),
       ),
     );
   }
 
-  Widget _buildConfirmedBookings() {
+  Widget _buildConfirmedBookings(bool isDark) {
     if (_confirmedBookings.isEmpty) {
-      return _buildEmptyState('No confirmed sessions', 'Confirmed sessions will appear here');
+      return _buildEmptyState('No confirmed sessions', 'Confirmed sessions will appear here', isDark);
     }
 
     return RefreshIndicator(
       onRefresh: _loadBookings,
+      color: isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
       child: ListView.builder(
         padding: const EdgeInsets.all(AppTheme.spacingLG),
         itemCount: _confirmedBookings.length,
-        itemBuilder: (context, index) => _buildConfirmedBookingCard(_confirmedBookings[index]),
+        itemBuilder: (context, index) => _buildConfirmedBookingCard(_confirmedBookings[index], isDark),
       ),
     );
   }
 
-  Widget _buildCompletedBookings() {
+  Widget _buildCompletedBookings(bool isDark) {
     if (_completedBookings.isEmpty) {
-      return _buildEmptyState('No completed sessions', 'Completed sessions will appear here');
+      return _buildEmptyState('No completed sessions', 'Completed sessions will appear here', isDark);
     }
 
     return RefreshIndicator(
       onRefresh: _loadBookings,
+      color: isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
       child: ListView.builder(
         padding: const EdgeInsets.all(AppTheme.spacingLG),
         itemCount: _completedBookings.length,
-        itemBuilder: (context, index) => _buildCompletedBookingCard(_completedBookings[index]),
+        itemBuilder: (context, index) => _buildCompletedBookingCard(_completedBookings[index], isDark),
       ),
     );
   }
 
-  Widget _buildCancelledBookings() {
+  Widget _buildCancelledBookings(bool isDark) {
     if (_cancelledBookings.isEmpty) {
-      return _buildEmptyState('No cancelled sessions', 'Cancelled sessions will appear here');
+      return _buildEmptyState('No cancelled sessions', 'Cancelled sessions will appear here', isDark);
     }
 
     return RefreshIndicator(
       onRefresh: _loadBookings,
+      color: isDark ? const Color(0xFF8B9DC3) : const Color(0xFF6B7FA8),
       child: ListView.builder(
         padding: const EdgeInsets.all(AppTheme.spacingLG),
         itemCount: _cancelledBookings.length,
-        itemBuilder: (context, index) => _buildCancelledBookingCard(_cancelledBookings[index]),
+        itemBuilder: (context, index) => _buildCancelledBookingCard(_cancelledBookings[index], isDark),
       ),
     );
   }
 
-  Widget _buildPendingBookingCard(Map<String, dynamic> booking) {
+  Widget _buildPendingBookingCard(Map<String, dynamic> booking, bool isDark) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
       elevation: 2,
@@ -524,7 +657,7 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
     );
   }
 
-  Widget _buildConfirmedBookingCard(Map<String, dynamic> booking) {
+  Widget _buildConfirmedBookingCard(Map<String, dynamic> booking, bool isDark) {
     final isToday = booking['date'] == '2026-01-31'; // Mock check
     
     return Card(
@@ -706,7 +839,13 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
     );
   }
 
-  Widget _buildCompletedBookingCard(Map<String, dynamic> booking) {
+  Widget _buildCompletedBookingCard(Map<String, dynamic> booking, bool isDark) {
+    // Safely extract rating value
+    final ratingValue = booking['rating'];
+    final int? rating = ratingValue is int 
+        ? ratingValue 
+        : (ratingValue is double ? ratingValue.toInt() : null);
+    
     return Card(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
       elevation: 2,
@@ -774,7 +913,7 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
             ),
             
             // Rating and Review
-            if (booking['rating'] != null) ...[
+            if (rating != null) ...[
               const SizedBox(height: AppTheme.spacingMD),
               Container(
                 padding: const EdgeInsets.all(AppTheme.spacingMD),
@@ -789,13 +928,13 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
                     Row(
                       children: [
                         ...List.generate(5, (index) => Icon(
-                          index < booking['rating'] ? Icons.star : Icons.star_border,
+                          index < rating ? Icons.star : Icons.star_border,
                           color: Colors.amber,
                           size: 16,
                         )),
                         const SizedBox(width: AppTheme.spacingSM),
                         Text(
-                          '${booking['rating']}/5',
+                          '$rating/5',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
@@ -848,7 +987,7 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
     );
   }
 
-  Widget _buildCancelledBookingCard(Map<String, dynamic> booking) {
+  Widget _buildCancelledBookingCard(Map<String, dynamic> booking, bool isDark) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
       elevation: 2,
@@ -957,28 +1096,46 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
     );
   }
 
-  Widget _buildEmptyState(String title, String subtitle) {
+  Widget _buildEmptyState(String title, String subtitle, bool isDark) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.calendar_today_outlined,
-            size: 64,
-            color: Colors.grey[400],
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withOpacity(0.03)
+                  : const Color(0xFFF8F9FA),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              Icons.calendar_today_outlined,
+              size: 64,
+              color: isDark
+                  ? Colors.white.withOpacity(0.3)
+                  : const Color(0xFFB0BEC5),
+            ),
           ),
           const SizedBox(height: AppTheme.spacingLG),
           Text(
             title,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: Colors.grey[600],
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: isDark
+                  ? Colors.white.withOpacity(0.6)
+                  : const Color(0xFF6B7FA8),
             ),
           ),
           const SizedBox(height: AppTheme.spacingSM),
           Text(
             subtitle,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey[500],
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark
+                  ? Colors.white.withOpacity(0.4)
+                  : const Color(0xFF90A4AE),
             ),
             textAlign: TextAlign.center,
           ),

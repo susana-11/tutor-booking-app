@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as path;
@@ -68,6 +69,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   
   late AnimationController _fabAnimationController;
   late Animation<double> _fabAnimation;
+  AnimationController? _fadeController;
+  Animation<double>? _fadeAnimation;
   
   int _currentPage = 1;
   static const int _messagesPerPage = 50;
@@ -95,6 +98,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _fabAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _fabAnimationController, curve: Curves.easeInOut),
     );
+    
+    // Fade animation for messages
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController!, curve: Curves.easeIn),
+    );
+    _fadeController?.forward();
   }
 
   void _setupRealtimeListeners() {
@@ -293,15 +306,27 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
-      appBar: _buildAppBar(),
+      backgroundColor: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF8F9FA),
+      appBar: _buildModernAppBar(isDark),
       body: Column(
         children: [
           // Messages List
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _buildMessagesList(),
+                ? Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isDark ? const Color(0xFF38B2AC) : AppTheme.primaryColor,
+                      ),
+                    ),
+                  )
+                : FadeTransition(
+                    opacity: _fadeAnimation ?? const AlwaysStoppedAnimation(1.0),
+                    child: _buildMessagesList(),
+                  ),
           ),
           
           // Typing Indicator
@@ -309,57 +334,111 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             TypingIndicatorWidget(userName: _typingUser),
           
           // Message Input
-          _buildMessageInput(),
+          _buildModernMessageInput(isDark),
         ],
       ),
-      floatingActionButton: _buildScrollToBottomFAB(),
+      floatingActionButton: _buildModernScrollFAB(isDark),
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
+  PreferredSizeWidget _buildModernAppBar(bool isDark) {
     return AppBar(
-      backgroundColor: AppTheme.primaryColor,
-      foregroundColor: Colors.white,
-      elevation: 1,
+      flexibleSpace: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+              ? [
+                  const Color(0xFF6B46C1).withOpacity(0.3),
+                  const Color(0xFF805AD5).withOpacity(0.2),
+                  const Color(0xFF38B2AC).withOpacity(0.2),
+                ]
+              : [
+                  const Color(0xFF6B46C1),
+                  const Color(0xFF805AD5),
+                  const Color(0xFF38B2AC),
+                ],
+          ),
+        ),
+      ),
+      elevation: 0,
+      leading: Container(
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => context.pop(),
+            borderRadius: BorderRadius.circular(12),
+            child: const Icon(
+              Icons.arrow_back_rounded,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
       title: Row(
         children: [
-          // Avatar
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: Colors.white.withOpacity(0.2),
-                backgroundImage: widget.participantAvatar != null
-                    ? NetworkImage(widget.participantAvatar!)
-                    : null,
-                child: widget.participantAvatar == null
-                    ? Text(
-                        widget.participantName.isNotEmpty
-                            ? widget.participantName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
+          // Avatar with gradient border
+          Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
               ),
-              // Online indicator
-              if (_isOnline)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                    backgroundImage: widget.participantAvatar != null
+                        ? NetworkImage(widget.participantAvatar!)
+                        : null,
+                    child: widget.participantAvatar == null
+                        ? Text(
+                            widget.participantName.isNotEmpty
+                                ? widget.participantName[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          )
+                        : null,
                   ),
-                ),
-            ],
+                  // Online indicator
+                  if (_isOnline)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
           
           const SizedBox(width: 12),
@@ -373,26 +452,51 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   widget.participantName,
                   style: const TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
                   ),
                 ),
                 if (widget.subject != null)
-                  Text(
-                    widget.subject!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.normal,
-                      color: Colors.white70,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      widget.subject!,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
                     ),
                   )
                 else
-                  Text(
-                    _isOnline ? 'Online' : 'Offline',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.normal,
-                      color: Colors.white70,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: _isOnline ? Colors.green : Colors.grey,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _isOnline ? 'Online' : 'Offline',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -401,28 +505,77 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
       actions: [
         // Video call
-        IconButton(
-          onPressed: _makeVideoCall,
-          icon: const Icon(Icons.videocam),
-          tooltip: 'Video Call',
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _makeVideoCall,
+              borderRadius: BorderRadius.circular(12),
+              child: const Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(
+                  Icons.videocam_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
         ),
         
         // Voice call
-        IconButton(
-          onPressed: _makeVoiceCall,
-          icon: const Icon(Icons.call),
-          tooltip: 'Voice Call',
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _makeVoiceCall,
+              borderRadius: BorderRadius.circular(12),
+              child: const Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(
+                  Icons.call_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
         ),
         
         // More options
         PopupMenuButton<String>(
           onSelected: _handleMenuAction,
+          icon: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.more_vert_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           itemBuilder: (context) => [
             const PopupMenuItem(
               value: 'view_profile',
               child: Row(
                 children: [
-                  Icon(Icons.person, size: 20),
+                  Icon(Icons.person_rounded, size: 20),
                   SizedBox(width: 12),
                   Text('View Profile'),
                 ],
@@ -432,7 +585,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               value: 'search',
               child: Row(
                 children: [
-                  Icon(Icons.search, size: 20),
+                  Icon(Icons.search_rounded, size: 20),
                   SizedBox(width: 12),
                   Text('Search Messages'),
                 ],
@@ -442,7 +595,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               value: 'clear_chat',
               child: Row(
                 children: [
-                  Icon(Icons.clear_all, size: 20),
+                  Icon(Icons.clear_all_rounded, size: 20),
                   SizedBox(width: 12),
                   Text('Clear Chat'),
                 ],
@@ -452,7 +605,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               value: 'report',
               child: Row(
                 children: [
-                  Icon(Icons.report, size: 20, color: Colors.red),
+                  Icon(Icons.report_rounded, size: 20, color: Colors.red),
                   SizedBox(width: 12),
                   Text('Report', style: TextStyle(color: Colors.red)),
                 ],
@@ -460,6 +613,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             ),
           ],
         ),
+        
+        const SizedBox(width: 8),
       ],
     );
   }
@@ -538,6 +693,283 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           const Expanded(child: Divider()),
         ],
       ),
+    );
+  }
+
+  Widget _buildModernMessageInput(bool isDark) {
+    // Show voice recorder when recording
+    if (_isRecording) {
+      return VoiceRecorder(
+        onRecordingComplete: _onRecordingComplete,
+        onCancel: _onRecordingCancel,
+      );
+    }
+
+    // Show normal message input
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Reply preview
+            if (_replyingTo != null) _buildModernReplyPreview(isDark),
+            
+            Row(
+              children: [
+                // Attachment button
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _showAttachmentOptions,
+                      borderRadius: BorderRadius.circular(12),
+                      child: const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Icon(
+                          Icons.add_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(width: 12),
+                
+                // Message input field
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.05)
+                          : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withOpacity(0.1)
+                            : Colors.transparent,
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _messageController,
+                      focusNode: _messageFocusNode,
+                      maxLines: null,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : AppTheme.textPrimaryColor,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Type a message...',
+                        hintStyle: TextStyle(
+                          color: isDark
+                              ? Colors.white.withOpacity(0.3)
+                              : AppTheme.textDisabledColor,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      onSubmitted: (_) => _sendMessage(),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(width: 12),
+                
+                // Send button
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _messageController,
+                  builder: (context, value, child) {
+                    final hasText = value.text.trim().isNotEmpty;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF6B46C1).withOpacity(0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: hasText ? () => _sendMessage() : _recordVoiceMessage,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Icon(
+                              hasText ? Icons.send_rounded : Icons.mic_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernReplyPreview(bool isDark) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+        border: Border(
+          left: BorderSide(
+            color: const Color(0xFF6B46C1),
+            width: 3,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+                      ).createShader(bounds),
+                      child: const Icon(
+                        Icons.reply_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Replying to ${_replyingTo!.senderName}',
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFF38B2AC) : const Color(0xFF6B46C1),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _replyingTo!.content,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark
+                        ? Colors.white.withOpacity(0.5)
+                        : Colors.grey[600],
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.grey[200],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => setState(() => _replyingTo = null),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: isDark
+                        ? Colors.white.withOpacity(0.7)
+                        : Colors.grey[600],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernScrollFAB(bool isDark) {
+    return AnimatedBuilder(
+      animation: _fabAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _fabAnimation.value,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6B46C1), Color(0xFF38B2AC)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B46C1).withOpacity(0.4),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _scrollToBottom,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  child: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1960,6 +2392,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _typingSubscription?.cancel();
     _onlineStatusSubscription?.cancel();
     _fabAnimationController.dispose();
+    _fadeController?.dispose();
     super.dispose();
   }
 }
