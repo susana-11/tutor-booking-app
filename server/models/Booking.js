@@ -196,6 +196,21 @@ const bookingSchema = new mongoose.Schema({
     newDate: Date,
     newStartTime: String,
     newEndTime: String,
+    newSessionType: {
+      type: String,
+      enum: ['online', 'inPerson'],
+    },
+    newLocation: {
+      type: {
+        type: String,
+        enum: ['student_location', 'tutor_location', 'public_place', 'custom'],
+      },
+      address: String,
+      fullAddress: String,
+    },
+    newDuration: Number, // in minutes
+    newTotalAmount: Number,
+    priceAdjustment: Number, // positive or negative
     reason: String,
     status: {
       type: String,
@@ -204,6 +219,14 @@ const bookingSchema = new mongoose.Schema({
     },
     respondedAt: Date,
   }],
+  rescheduleCount: {
+    type: Number,
+    default: 0,
+  },
+  maxRescheduleAttempts: {
+    type: Number,
+    default: 3, // Maximum 3 reschedule attempts
+  },
   originalBookingId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Booking',
@@ -396,7 +419,7 @@ const bookingSchema = new mongoose.Schema({
   escrow: {
     status: {
       type: String,
-      enum: ['none', 'held', 'released', 'refunded'],
+      enum: ['none', 'pending', 'held', 'released', 'refunded'],
       default: 'none'
     },
     heldAt: Date,
@@ -406,9 +429,9 @@ const bookingSchema = new mongoose.Schema({
       type: Boolean,
       default: true
     },
-    releaseDelayHours: {
+    releaseDelayMinutes: {
       type: Number,
-      default: 24 // Release 24 hours after session completion
+      default: 10 // Release 10 minutes after session completion (for testing, use 1440 for 24 hours in production)
     }
   },
   // Rating and Review
@@ -523,9 +546,13 @@ bookingSchema.virtual('canBeRescheduled').get(function () {
   const [hours, minutes] = this.startTime.split(':');
   sessionDateTime.setHours(parseInt(hours), parseInt(minutes));
 
-  // Check if more than 48 hours before session
+  // Check if more than 1 hour before session (for testing, use 48 hours in production)
   const hoursUntilSession = (sessionDateTime - now) / (1000 * 60 * 60);
-  return hoursUntilSession >= 48;
+  
+  // Check reschedule limit
+  const hasReachedLimit = this.rescheduleCount >= this.maxRescheduleAttempts;
+  
+  return hoursUntilSession >= 1 && !hasReachedLimit; // 1 hour for testing, 48 for production
 });
 
 bookingSchema.virtual('canBeRated').get(function () {
@@ -691,12 +718,12 @@ bookingSchema.methods.completeSession = async function (sessionNotes) {
   // Schedule escrow release based on configured delay
   if (this.escrow.status === 'held' && this.escrow.autoReleaseEnabled) {
     const releaseDate = new Date();
-    const releaseDelayHours = this.escrow.releaseDelayHours || 1; // Default 1 hour if not set
-    releaseDate.setHours(releaseDate.getHours() + releaseDelayHours);
+    const releaseDelayMinutes = this.escrow.releaseDelayMinutes || 10; // Default 10 minutes for testing
+    releaseDate.setMinutes(releaseDate.getMinutes() + releaseDelayMinutes);
     this.escrow.releaseScheduledFor = releaseDate;
     
     console.log(`📅 Escrow release scheduled for: ${releaseDate.toISOString()}`);
-    console.log(`   (${releaseDelayHours} hours from now)`);
+    console.log(`   (${releaseDelayMinutes} minutes from now - dispute window)`);
   }
 
   return await this.save();
@@ -755,12 +782,12 @@ bookingSchema.methods.endSession = async function (userId) {
   // Schedule escrow release based on configured delay
   if (this.escrow.status === 'held' && this.escrow.autoReleaseEnabled) {
     const releaseDate = new Date();
-    const releaseDelayHours = this.escrow.releaseDelayHours || 1; // Default 1 hour if not set
-    releaseDate.setHours(releaseDate.getHours() + releaseDelayHours);
+    const releaseDelayMinutes = this.escrow.releaseDelayMinutes || 10; // Default 10 minutes for testing
+    releaseDate.setMinutes(releaseDate.getMinutes() + releaseDelayMinutes);
     this.escrow.releaseScheduledFor = releaseDate;
     
     console.log(`📅 Escrow release scheduled for: ${releaseDate.toISOString()}`);
-    console.log(`   (${releaseDelayHours} hours from now)`);
+    console.log(`   (${releaseDelayMinutes} minutes from now - dispute window)`);
   }
 
   return await this.save();
@@ -978,12 +1005,12 @@ bookingSchema.methods.performCheckOut = async function (userId, userRole) {
     // Schedule escrow release based on configured delay
     if (this.escrow.status === 'held' && this.escrow.autoReleaseEnabled) {
       const releaseDate = new Date();
-      const releaseDelayHours = this.escrow.releaseDelayHours || 1; // Default 1 hour if not set
-      releaseDate.setHours(releaseDate.getHours() + releaseDelayHours);
+      const releaseDelayMinutes = this.escrow.releaseDelayMinutes || 10; // Default 10 minutes for testing
+      releaseDate.setMinutes(releaseDate.getMinutes() + releaseDelayMinutes);
       this.escrow.releaseScheduledFor = releaseDate;
       
       console.log(`📅 Escrow release scheduled for: ${releaseDate.toISOString()}`);
-      console.log(`   (${releaseDelayHours} hours from now)`);
+      console.log(`   (${releaseDelayMinutes} minutes from now - dispute window)`);
     }
   }
 

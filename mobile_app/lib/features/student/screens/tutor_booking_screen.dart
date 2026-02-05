@@ -35,6 +35,11 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
   DateTime _selectedDate = DateTime.now();
   AvailabilitySlot? _selectedSlot;
   
+  // Session type and duration selection
+  String? _selectedSessionType; // 'online' or 'offline'
+  double _selectedDuration = 1.0; // in hours (1, 1.5, 2)
+  String? _selectedMeetingLocation; // for offline sessions
+  
   final AvailabilityService _availabilityService = AvailabilityService();
   final SocketService _socketService = SocketService();
   final TextEditingController _notesController = TextEditingController();
@@ -42,11 +47,14 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
   List<AvailabilitySlot> _availableSlots = [];
   bool _isLoading = true;
   bool _isBooking = false;
+  
+  // Duration options
+  final List<double> _durationOptions = [1.0, 1.5, 2.0];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadAvailableSlots();
   }
 
@@ -112,7 +120,8 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
           unselectedLabelColor: Colors.white70,
           tabs: const [
             Tab(text: 'Select Time'),
-            Tab(text: 'Confirm Booking'),
+            Tab(text: 'Session Details'),
+            Tab(text: 'Confirm'),
           ],
         ),
       ),
@@ -122,6 +131,7 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
               controller: _tabController,
               children: [
                 _buildTimeSelectionTab(),
+                _buildSessionDetailsTab(),
                 _buildConfirmationTab(),
               ],
             ),
@@ -317,15 +327,9 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
       );
     }
 
-    return GridView.builder(
+    return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 3,
-        crossAxisSpacing: AppTheme.spacingMD,
-        mainAxisSpacing: AppTheme.spacingMD,
-      ),
       itemCount: slotsForDate.length,
       itemBuilder: (context, index) {
         final slot = slotsForDate[index];
@@ -335,30 +339,520 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
           onTap: () {
             setState(() {
               _selectedSlot = slot;
+              // Reset session type selection when slot changes
+              _selectedSessionType = null;
+              _selectedMeetingLocation = null;
             });
           },
           child: Container(
+            margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
             decoration: BoxDecoration(
-              color: isSelected ? AppTheme.primaryColor : Colors.white,
+              color: isSelected ? AppTheme.primaryColor.withOpacity(0.1) : Colors.white,
               borderRadius: BorderRadius.circular(AppTheme.radiusMD),
               border: Border.all(
                 color: isSelected ? AppTheme.primaryColor : Colors.grey[300]!,
-                width: 2,
+                width: isSelected ? 2 : 1,
               ),
             ),
-            child: Center(
-              child: Text(
-                slot.timeSlot.displayTime,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black87,
-                  fontWeight: FontWeight.w600,
-                ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppTheme.spacingMD),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time,
+                        color: isSelected ? AppTheme.primaryColor : Colors.grey[600],
+                        size: 20,
+                      ),
+                      const SizedBox(width: AppTheme.spacingSM),
+                      Text(
+                        slot.timeSlot.displayTime,
+                        style: TextStyle(
+                          color: isSelected ? AppTheme.primaryColor : Colors.black87,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (isSelected)
+                        Icon(
+                          Icons.check_circle,
+                          color: AppTheme.primaryColor,
+                          size: 20,
+                        ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: AppTheme.spacingSM),
+                  
+                  // Session Types Available
+                  Wrap(
+                    spacing: AppTheme.spacingSM,
+                    runSpacing: AppTheme.spacingSM,
+                    children: [
+                      if (slot.hasOnlineSession)
+                        _buildSessionTypeChip(
+                          icon: Icons.videocam,
+                          label: 'Online',
+                          price: slot.onlineRate ?? 0,
+                          color: Colors.blue,
+                        ),
+                      if (slot.hasOfflineSession)
+                        _buildSessionTypeChip(
+                          icon: Icons.location_on,
+                          label: 'Offline',
+                          price: slot.offlineRate ?? 0,
+                          color: Colors.green,
+                        ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
         );
       },
     );
+  }
+  
+  Widget _buildSessionTypeChip({
+    required IconData icon,
+    required String label,
+    required double price,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacingSM,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            '$label - ${price.toStringAsFixed(0)} ETB/hr',
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSessionDetailsTab() {
+    if (_selectedSlot == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.schedule,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: AppTheme.spacingMD),
+            Text(
+              'Please select a time slot first',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppTheme.spacingLG),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Session Type Selection
+          Text(
+            'Choose Session Type',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          
+          const SizedBox(height: AppTheme.spacingMD),
+          
+          if (_selectedSlot!.hasOnlineSession)
+            _buildSessionTypeCard(
+              type: 'online',
+              icon: Icons.videocam,
+              title: 'Online Session',
+              subtitle: 'Video call via the app',
+              price: _selectedSlot!.onlineRate ?? 0,
+              color: Colors.blue,
+            ),
+          
+          if (_selectedSlot!.hasOfflineSession)
+            _buildSessionTypeCard(
+              type: 'offline',
+              icon: Icons.location_on,
+              title: 'Offline Session',
+              subtitle: 'In-person meeting',
+              price: _selectedSlot!.offlineRate ?? 0,
+              color: Colors.green,
+            ),
+          
+          const SizedBox(height: AppTheme.spacingXL),
+          
+          // Duration Selection
+          Text(
+            'Select Duration',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          
+          const SizedBox(height: AppTheme.spacingMD),
+          
+          Row(
+            children: _durationOptions.map((duration) {
+              final isSelected = _selectedDuration == duration;
+              final hourlyRate = _getSelectedHourlyRate();
+              final totalPrice = hourlyRate * duration;
+              
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedDuration = duration;
+                    });
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: AppTheme.spacingSM),
+                    padding: const EdgeInsets.all(AppTheme.spacingMD),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppTheme.primaryColor : Colors.white,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                      border: Border.all(
+                        color: isSelected ? AppTheme.primaryColor : Colors.grey[300]!,
+                        width: 2,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          duration == 1.0 ? '1 hr' : duration == 1.5 ? '1.5 hrs' : '2 hrs',
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.black87,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${totalPrice.toStringAsFixed(0)} ETB',
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          
+          // Meeting Location (for offline sessions)
+          if (_selectedSessionType == 'offline') ...[
+            const SizedBox(height: AppTheme.spacingXL),
+            
+            Text(
+              'Meeting Location',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            
+            const SizedBox(height: AppTheme.spacingMD),
+            
+            _buildMeetingLocationCard(
+              location: 'studentHome',
+              icon: Icons.home,
+              title: 'Student Home',
+              subtitle: 'Tutor comes to your location',
+            ),
+            
+            _buildMeetingLocationCard(
+              location: 'tutorLocation',
+              icon: Icons.school,
+              title: 'Tutor Location',
+              subtitle: _getOfflineSessionLocation(),
+            ),
+            
+            _buildMeetingLocationCard(
+              location: 'publicPlace',
+              icon: Icons.coffee,
+              title: 'Public Place',
+              subtitle: 'Meet at a coffee shop or library',
+            ),
+            
+            // Travel Distance Info
+            if (_selectedSlot!.sessionTypes.any((st) => st.isOffline)) ...[
+              const SizedBox(height: AppTheme.spacingMD),
+              Container(
+                padding: const EdgeInsets.all(AppTheme.spacingMD),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                    const SizedBox(width: AppTheme.spacingSM),
+                    Expanded(
+                      child: Text(
+                        'Tutor can travel up to ${_getTravelDistance()} km',
+                        style: TextStyle(
+                          color: Colors.orange[700],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+          
+          const SizedBox(height: AppTheme.spacingXL),
+          
+          // Continue Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _selectedSessionType != null &&
+                      (_selectedSessionType != 'offline' || _selectedMeetingLocation != null)
+                  ? () {
+                      _tabController.animateTo(2); // Go to confirmation tab
+                    }
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingLG),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                ),
+              ),
+              child: const Text(
+                'Continue to Confirmation',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSessionTypeCard({
+    required String type,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required double price,
+    required Color color,
+  }) {
+    final isSelected = _selectedSessionType == type;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedSessionType = type;
+          if (type == 'online') {
+            _selectedMeetingLocation = null; // Reset location for online
+          }
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
+        padding: const EdgeInsets.all(AppTheme.spacingLG),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+          border: Border.all(
+            color: isSelected ? color : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingMD),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(width: AppTheme.spacingMD),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: isSelected ? color : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${price.toStringAsFixed(0)} ETB',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isSelected ? color : Colors.black87,
+                  ),
+                ),
+                Text(
+                  'per hour',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: AppTheme.spacingSM),
+              Icon(Icons.check_circle, color: color, size: 24),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildMeetingLocationCard({
+    required String location,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    final isSelected = _selectedMeetingLocation == location;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedMeetingLocation = location;
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppTheme.spacingMD),
+        padding: const EdgeInsets.all(AppTheme.spacingMD),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryColor.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryColor : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? AppTheme.primaryColor : Colors.grey[600],
+              size: 24,
+            ),
+            const SizedBox(width: AppTheme.spacingMD),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? AppTheme.primaryColor : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.check_circle, color: AppTheme.primaryColor, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  double _getSelectedHourlyRate() {
+    if (_selectedSlot == null || _selectedSessionType == null) return widget.hourlyRate;
+    
+    if (_selectedSessionType == 'online') {
+      return _selectedSlot!.onlineRate ?? widget.hourlyRate;
+    } else {
+      return _selectedSlot!.offlineRate ?? widget.hourlyRate;
+    }
+  }
+  
+  String _getOfflineSessionLocation() {
+    if (_selectedSlot == null) return 'Location not specified';
+    
+    final offlineSession = _selectedSlot!.sessionTypes.firstWhere(
+      (st) => st.isOffline,
+      orElse: () => SessionTypeInfo(type: 'offline', hourlyRate: 0),
+    );
+    
+    return offlineSession.meetingLocation ?? 'Location not specified';
+  }
+  
+  double _getTravelDistance() {
+    if (_selectedSlot == null) return 0;
+    
+    final offlineSession = _selectedSlot!.sessionTypes.firstWhere(
+      (st) => st.isOffline,
+      orElse: () => SessionTypeInfo(type: 'offline', hourlyRate: 0),
+    );
+    
+    return offlineSession.travelDistance ?? 0;
   }
 
   Widget _buildConfirmationTab() {
@@ -551,7 +1045,7 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
   }
 
   Future<void> _bookSession() async {
-    if (_selectedSlot == null) return;
+    if (_selectedSlot == null || _selectedSessionType == null) return;
 
     setState(() => _isBooking = true);
 
@@ -566,7 +1060,19 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
           ? widget.subjectId 
           : widget.subject;
 
-      print('🔍 Creating booking with subject: $subjectIdentifier');
+      // Calculate total amount
+      final hourlyRate = _getSelectedHourlyRate();
+      final totalAmount = hourlyRate * _selectedDuration;
+
+      print('🔍 Creating booking with:');
+      print('  - Subject: $subjectIdentifier');
+      print('  - Session Type: $_selectedSessionType');
+      print('  - Duration: $_selectedDuration hours');
+      print('  - Hourly Rate: $hourlyRate ETB');
+      print('  - Total Amount: $totalAmount ETB');
+      if (_selectedSessionType == 'offline') {
+        print('  - Meeting Location: $_selectedMeetingLocation');
+      }
 
       // Create booking via API
       final bookingService = BookingService();
@@ -576,23 +1082,33 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
         date: _selectedSlot!.date,
         startTime: _selectedSlot!.timeSlot.startTime,
         endTime: _selectedSlot!.timeSlot.endTime,
-        mode: 'online', // Default to online
+        mode: _selectedSessionType!, // 'online' or 'offline'
+        duration: _selectedDuration,
+        totalAmount: totalAmount,
+        location: _selectedSessionType == 'offline' ? _getMeetingLocationText() : null,
         message: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
       );
 
       if (response.success) {
-        // Show success message
+        // Booking created successfully - now proceed to payment
+        final booking = response.data['booking'] ?? response.data;
+        final bookingId = booking['_id'] ?? booking['id'];
+        
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Booking request sent! Waiting for tutor confirmation.'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-
-          // Navigate back to bookings screen
-          context.pop(); // Go back to previous screen
+          // Navigate to payment screen with complete booking details
+          context.push('/payment', extra: {
+            'bookingId': bookingId,
+            'bookingDetails': {
+              'tutorName': widget.tutorName,
+              'subject': widget.subject,
+              'date': _formatDate(_selectedSlot!.date),
+              'time': '${_selectedSlot!.timeSlot.startTime} - ${_selectedSlot!.timeSlot.endTime}',
+              'duration': (_selectedDuration * 60).toInt(), // Convert to minutes
+              'sessionType': _selectedSessionType,
+              'totalAmount': totalAmount,
+              'meetingLocation': _selectedSessionType == 'offline' ? _getMeetingLocationText() : null,
+            },
+          });
         }
       } else {
         throw Exception(response.error ?? 'Failed to create booking');

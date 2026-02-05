@@ -1,8 +1,66 @@
+class SessionTypeInfo {
+  final String type; // 'online' or 'offline'
+  final double hourlyRate;
+  final String? meetingLocation;
+  final double? travelDistance;
+  final String? additionalNotes;
+
+  const SessionTypeInfo({
+    required this.type,
+    required this.hourlyRate,
+    this.meetingLocation,
+    this.travelDistance,
+    this.additionalNotes,
+  });
+
+  bool get isOnline => type == 'online';
+  bool get isOffline => type == 'offline';
+
+  factory SessionTypeInfo.fromJson(Map<String, dynamic> json) {
+    return SessionTypeInfo(
+      type: json['type'] ?? 'online',
+      hourlyRate: (json['hourlyRate'] ?? 0).toDouble(),
+      meetingLocation: json['meetingLocation'],
+      travelDistance: json['travelDistance'] != null 
+          ? (json['travelDistance'] as num).toDouble() 
+          : null,
+      additionalNotes: json['additionalNotes'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'type': type,
+      'hourlyRate': hourlyRate,
+      if (meetingLocation != null) 'meetingLocation': meetingLocation,
+      if (travelDistance != null) 'travelDistance': travelDistance,
+      if (additionalNotes != null) 'additionalNotes': additionalNotes,
+    };
+  }
+
+  SessionTypeInfo copyWith({
+    String? type,
+    double? hourlyRate,
+    String? meetingLocation,
+    double? travelDistance,
+    String? additionalNotes,
+  }) {
+    return SessionTypeInfo(
+      type: type ?? this.type,
+      hourlyRate: hourlyRate ?? this.hourlyRate,
+      meetingLocation: meetingLocation ?? this.meetingLocation,
+      travelDistance: travelDistance ?? this.travelDistance,
+      additionalNotes: additionalNotes ?? this.additionalNotes,
+    );
+  }
+}
+
 class AvailabilitySlot {
   final String id;
   final String tutorId;
   final DateTime date;
   final TimeSlot timeSlot;
+  final List<SessionTypeInfo> sessionTypes;
   final bool isAvailable;
   final bool isRecurring;
   final String? recurringPattern; // 'weekly', 'daily', etc.
@@ -15,6 +73,7 @@ class AvailabilitySlot {
     required this.tutorId,
     required this.date,
     required this.timeSlot,
+    required this.sessionTypes,
     required this.isAvailable,
     this.isRecurring = false,
     this.recurringPattern,
@@ -39,6 +98,25 @@ class AvailabilitySlot {
     return slotDateTime.isAfter(DateTime.now());
   }
 
+  // Get session types
+  bool get hasOnlineSession => sessionTypes.any((st) => st.isOnline);
+  bool get hasOfflineSession => sessionTypes.any((st) => st.isOffline);
+  bool get hasBothSessionTypes => hasOnlineSession && hasOfflineSession;
+
+  // Get pricing
+  double? get onlineRate => sessionTypes.firstWhere(
+    (st) => st.isOnline,
+    orElse: () => SessionTypeInfo(type: 'online', hourlyRate: 0),
+  ).hourlyRate;
+  
+  double? get offlineRate => sessionTypes.firstWhere(
+    (st) => st.isOffline,
+    orElse: () => SessionTypeInfo(type: 'offline', hourlyRate: 0),
+  ).hourlyRate;
+
+  double get minRate => sessionTypes.map((st) => st.hourlyRate).reduce((a, b) => a < b ? a : b);
+  double get maxRate => sessionTypes.map((st) => st.hourlyRate).reduce((a, b) => a > b ? a : b);
+
   // Helper method to get the full datetime of the slot start
   DateTime _getSlotStartDateTime() {
     final timeParts = timeSlot.startTime.split(':');
@@ -61,6 +139,9 @@ class AvailabilitySlot {
       tutorId: json['tutorId'] ?? '',
       date: DateTime.parse(json['date']),
       timeSlot: TimeSlot.fromJson(json['timeSlot']),
+      sessionTypes: (json['sessionTypes'] as List<dynamic>?)
+          ?.map((st) => SessionTypeInfo.fromJson(st))
+          .toList() ?? [],
       isAvailable: json['isAvailable'] ?? false,
       isRecurring: json['isRecurring'] ?? false,
       recurringPattern: json['recurringPattern'],
@@ -76,6 +157,7 @@ class AvailabilitySlot {
       'tutorId': tutorId,
       'date': date.toIso8601String(),
       'timeSlot': timeSlot.toJson(),
+      'sessionTypes': sessionTypes.map((st) => st.toJson()).toList(),
       'isAvailable': isAvailable,
       'isRecurring': isRecurring,
       'recurringPattern': recurringPattern,
@@ -90,6 +172,7 @@ class AvailabilitySlot {
     String? tutorId,
     DateTime? date,
     TimeSlot? timeSlot,
+    List<SessionTypeInfo>? sessionTypes,
     bool? isAvailable,
     bool? isRecurring,
     String? recurringPattern,
@@ -102,6 +185,7 @@ class AvailabilitySlot {
       tutorId: tutorId ?? this.tutorId,
       date: date ?? this.date,
       timeSlot: timeSlot ?? this.timeSlot,
+      sessionTypes: sessionTypes ?? this.sessionTypes,
       isAvailable: isAvailable ?? this.isAvailable,
       isRecurring: isRecurring ?? this.isRecurring,
       recurringPattern: recurringPattern ?? this.recurringPattern,
@@ -150,6 +234,7 @@ class BookingInfo {
   final String? studentPhone;
   final String subject;
   final String status; // 'pending', 'confirmed', 'completed', 'cancelled'
+  final String sessionType; // 'online' or 'offline'
   final double amount;
   final String? notes;
   final String? meetingLink;
@@ -163,6 +248,7 @@ class BookingInfo {
     this.studentPhone,
     required this.subject,
     required this.status,
+    required this.sessionType,
     required this.amount,
     this.notes,
     this.meetingLink,
@@ -173,6 +259,8 @@ class BookingInfo {
   bool get isConfirmed => status == 'confirmed';
   bool get isCompleted => status == 'completed';
   bool get isCancelled => status == 'cancelled';
+  bool get isOnline => sessionType == 'online';
+  bool get isOffline => sessionType == 'offline';
 
   factory BookingInfo.fromJson(Map<String, dynamic> json) {
     return BookingInfo(
@@ -183,6 +271,7 @@ class BookingInfo {
       studentPhone: json['studentPhone'],
       subject: json['subject'] ?? '',
       status: json['status'] ?? 'pending',
+      sessionType: json['sessionType'] ?? 'online',
       amount: (json['amount'] ?? 0).toDouble(),
       notes: json['notes'],
       meetingLink: json['meetingLink'],
@@ -199,6 +288,7 @@ class BookingInfo {
       'studentPhone': studentPhone,
       'subject': subject,
       'status': status,
+      'sessionType': sessionType,
       'amount': amount,
       'notes': notes,
       'meetingLink': meetingLink,

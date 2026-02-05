@@ -147,7 +147,7 @@ class PaymentService {
         // Calculate fees
         const fees = chapaService.calculateFees(booking.totalAmount);
 
-        // Update booking
+        // Update booking payment status
         booking.payment.status = 'paid';
         booking.payment.paidAt = new Date();
         booking.payment.chapaTransactionId = result.data.transactionId;
@@ -156,22 +156,15 @@ class PaymentService {
         booking.paymentStatus = 'paid';
         booking.status = 'confirmed';
         
-        // Hold payment in escrow (NOT in tutor's available balance yet!)
-        const releaseDelayHours = escrowService.config.releaseDelayHours;
-        booking.escrow = {
-          status: 'held',
-          amount: fees.tutorShare,
-          heldAt: new Date(),
-          releaseScheduledFor: null, // Will be set after session completion
-          autoReleaseEnabled: true,
-          releaseDelayHours: releaseDelayHours
-        };
+        // Hold payment in escrow using the booking method
+        await booking.holdInEscrow();
         
         await booking.save();
         
+        const releaseDelayMinutes = booking.escrow.releaseDelayMinutes || 10;
         console.log(`🔒 Payment held in escrow for booking ${booking._id}`);
         console.log(`   Amount: ETB ${fees.tutorShare}`);
-        console.log(`   Will be released ${releaseDelayHours} hours after session completion`);
+        console.log(`   Will be released ${releaseDelayMinutes} minutes after session completion`);
 
         // Update transaction
         transaction.status = 'completed';
@@ -181,7 +174,7 @@ class PaymentService {
         await transaction.markCompleted();
 
         // Update tutor balance - ADD TO PENDING, NOT AVAILABLE!
-        const tutorProfileId = booking.tutorId?._id || booking.tutorId;
+        const tutorProfileId = booking.tutorProfileId || booking.tutorId?._id || booking.tutorId;
         await this.updateTutorBalance(tutorProfileId, fees.tutorShare, 'add', 'pending');
 
         // Update tutor profile stats
@@ -190,6 +183,10 @@ class PaymentService {
           tutorProfile.stats.totalEarnings += fees.tutorShare;
           await tutorProfile.save();
         }
+
+        // Send notifications to both parties
+        const notificationService = require('./notificationService');
+        await notificationService.sendBookingConfirmedNotification(booking);
 
         return {
           success: true,
@@ -200,7 +197,7 @@ class PaymentService {
             platformFee: fees.platformFee,
             status: 'paid',
             escrowStatus: 'held',
-            releaseDelayHours: releaseDelayHours
+            releaseDelayMinutes: releaseDelayMinutes
           }
         };
       } else {

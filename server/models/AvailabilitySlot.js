@@ -19,6 +19,41 @@ const timeSlotSchema = new mongoose.Schema({
   }
 });
 
+const sessionTypeSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    enum: ['online', 'offline'],
+    required: true
+  },
+  hourlyRate: {
+    type: Number,
+    required: true,
+    min: 0,
+    max: 10000 // Maximum rate in ETB
+  },
+  // For offline sessions
+  meetingLocation: {
+    type: String,
+    required: function() {
+      return this.type === 'offline';
+    },
+    minlength: 5,
+    maxlength: 200
+  },
+  travelDistance: {
+    type: Number, // in kilometers
+    required: function() {
+      return this.type === 'offline';
+    },
+    min: 0,
+    max: 100
+  },
+  additionalNotes: {
+    type: String,
+    maxlength: 500
+  }
+});
+
 const bookingInfoSchema = new mongoose.Schema({
   bookingId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -48,6 +83,11 @@ const bookingInfoSchema = new mongoose.Schema({
     enum: ['pending', 'confirmed', 'completed', 'cancelled', 'no-show'],
     default: 'pending'
   },
+  sessionType: {
+    type: String,
+    enum: ['online', 'offline'],
+    required: true
+  },
   amount: {
     type: Number,
     required: true,
@@ -74,6 +114,16 @@ const availabilitySlotSchema = new mongoose.Schema({
   timeSlot: {
     type: timeSlotSchema,
     required: true
+  },
+  sessionTypes: {
+    type: [sessionTypeSchema],
+    required: true,
+    validate: {
+      validator: function(v) {
+        return v && v.length > 0;
+      },
+      message: 'At least one session type is required'
+    }
   },
   isAvailable: {
     type: Boolean,

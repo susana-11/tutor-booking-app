@@ -458,6 +458,30 @@ exports.cancelBooking = async (req, res) => {
       });
     }
 
+    // Cannot cancel if session has started or completed
+    if (['completed', 'no-show'].includes(booking.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Booking cannot be cancelled (current status: ${booking.status})`
+      });
+    }
+
+    // Check if session has already started
+    if (booking.session?.isActive || booking.sessionStartedAt) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot cancel - session has already started'
+      });
+    }
+
+    // Check if both parties have checked in (for offline sessions)
+    if (booking.checkIn?.bothCheckedIn) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot cancel - both parties have checked in'
+      });
+    }
+
     if (!['pending', 'confirmed'].includes(booking.status)) {
       return res.status(400).json({
         success: false,
@@ -466,7 +490,23 @@ exports.cancelBooking = async (req, res) => {
     }
 
     // Calculate refund eligibility
-    const refundCalculation = escrowService.calculateRefundAmount(booking);
+    // If tutor cancels, always give full refund
+    let refundCalculation;
+    if (isTutor) {
+      refundCalculation = {
+        refundAmount: booking.totalAmount,
+        refundPercentage: 100,
+        platformFeeRetained: 0,
+        hoursUntilSession: 0,
+        refundReason: 'Tutor cancelled - full refund',
+        eligible: true
+      };
+      console.log('Tutor cancellation - full refund:', refundCalculation);
+    } else {
+      // Student cancellation - apply refund rules based on timing
+      refundCalculation = escrowService.calculateRefundAmount(booking);
+      console.log('Student cancellation - refund calculation:', refundCalculation);
+    }
     
     console.log('Refund calculation:', refundCalculation);
 
@@ -856,7 +896,15 @@ async function processPaymentMock({ amount, currency, paymentMethod, paymentToke
 exports.requestReschedule = async (req, res) => {
   try {
     const { bookingId } = req.params;
-    const { newDate, newStartTime, newEndTime, reason } = req.body;
+    const { 
+      newDate, 
+      newStartTime, 
+      newEndTime, 
+      newSessionType,
+      newLocation,
+      newDuration,
+      reason 
+    } = req.body;
 
     const booking = await Booking.findById(bookingId)
       .populate('studentId', 'firstName lastName')
@@ -882,10 +930,19 @@ exports.requestReschedule = async (req, res) => {
 
     // Check if booking can be rescheduled
     if (!booking.canBeRescheduled) {
-      return res.status(400).json({
-        success: false,
-        message: 'Booking cannot be rescheduled (must be at least 48 hours before session)'
-      });
+      const hoursUntilSession = (new Date(booking.sessionDate) - new Date()) / (1000 * 60 * 60);
+      if (hoursUntilSession < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Booking cannot be rescheduled (must be at least 1 hour before session)'
+        });
+      }
+      if (booking.rescheduleCount >= booking.maxRescheduleAttempts) {
+        return res.status(400).json({
+          success: false,
+          message: `Maximum reschedule attempts (${booking.maxRescheduleAttempts}) reached`
+        });
+      }
     }
 
     // Check if there's already a pending reschedule request
@@ -897,6 +954,20 @@ exports.requestReschedule = async (req, res) => {
       });
     }
 
+    // Calculate price adjustment if duration or session type changes
+    let priceAdjustment = 0;
+    let newTotalAmount = booking.totalAmount;
+    
+    if (newDuration && newDuration !== booking.duration) {
+      // Duration changed - recalculate price
+      newTotalAmount = (booking.pricePerHour * newDuration) / 60;
+      priceAdjustment = newTotalAmount - booking.totalAmount;
+    } else if (newSessionType && newSessionType !== booking.sessionType) {
+      // Session type changed - might have different pricing
+      // For now, keep same price unless duration also changes
+      priceAdjustment = 0;
+    }
+
     // Add reschedule request
     const rescheduleRequest = {
       requestedBy: req.user.userId,
@@ -904,6 +975,11 @@ exports.requestReschedule = async (req, res) => {
       newDate: new Date(newDate),
       newStartTime,
       newEndTime,
+      newSessionType: newSessionType || booking.sessionType,
+      newLocation: newLocation || booking.location,
+      newDuration: newDuration || booking.duration,
+      newTotalAmount,
+      priceAdjustment,
       reason,
       status: 'pending',
     };
@@ -928,17 +1004,24 @@ exports.requestReschedule = async (req, res) => {
         year: 'numeric'
       });
 
+      let notificationBody = `${requestedByName} requested to reschedule your session to ${formattedNewDate} at ${newStartTime}`;
+      
+      if (priceAdjustment !== 0) {
+        notificationBody += `. Price adjustment: ETB ${Math.abs(priceAdjustment).toFixed(2)} ${priceAdjustment > 0 ? 'additional' : 'refund'}`;
+      }
+
       await notificationService.createNotification({
         userId: notifyUserId,
         type: 'reschedule_request',
         title: 'Reschedule Request',
-        body: `${requestedByName} requested to reschedule your session to ${formattedNewDate} at ${newStartTime}`,
+        body: notificationBody,
         data: {
           type: 'reschedule_request',
           bookingId: booking._id.toString(),
           requestId: savedRequest._id.toString(),
           newDate: formattedNewDate,
-          newTime: `${newStartTime} - ${newEndTime}`
+          newTime: `${newStartTime} - ${newEndTime}`,
+          priceAdjustment: priceAdjustment
         },
         priority: 'high',
         actionUrl: isStudent ? '/tutor/bookings' : '/student/bookings'
@@ -952,7 +1035,9 @@ exports.requestReschedule = async (req, res) => {
       message: 'Reschedule request submitted successfully',
       data: {
         bookingId: booking._id,
-        rescheduleRequest: savedRequest
+        rescheduleRequest: savedRequest,
+        priceAdjustment,
+        newTotalAmount
       }
     });
 
@@ -1030,14 +1115,50 @@ exports.respondToRescheduleRequest = async (req, res) => {
     rescheduleRequest.status = response === 'accept' ? 'accepted' : 'rejected';
     rescheduleRequest.respondedAt = new Date();
 
-    // If accepted, update the booking with new date/time
+    // If accepted, update the booking with new date/time and other details
     if (response === 'accept') {
       booking.sessionDate = rescheduleRequest.newDate;
       booking.startTime = rescheduleRequest.newStartTime;
       booking.endTime = rescheduleRequest.newEndTime;
       
+      // Update session type if changed
+      if (rescheduleRequest.newSessionType) {
+        booking.sessionType = rescheduleRequest.newSessionType;
+      }
+      
+      // Update location if changed (for offline sessions)
+      if (rescheduleRequest.newLocation) {
+        booking.location = rescheduleRequest.newLocation;
+      }
+      
+      // Update duration and price if changed
+      if (rescheduleRequest.newDuration) {
+        booking.duration = rescheduleRequest.newDuration;
+      }
+      if (rescheduleRequest.newTotalAmount) {
+        booking.totalAmount = rescheduleRequest.newTotalAmount;
+      }
+      
+      // Increment reschedule count
+      booking.rescheduleCount = (booking.rescheduleCount || 0) + 1;
+      
       // Mark as rescheduled
       booking.isRescheduled = true;
+      
+      // Handle payment adjustment if price changed
+      if (rescheduleRequest.priceAdjustment && rescheduleRequest.priceAdjustment !== 0) {
+        // Update escrow amount if payment was made
+        if (booking.payment?.status === 'paid' && booking.escrow?.status === 'held') {
+          const newEscrowAmount = booking.escrow.amount + rescheduleRequest.priceAdjustment;
+          booking.escrow.amount = Math.max(0, newEscrowAmount);
+          
+          // If additional payment needed, update payment status
+          if (rescheduleRequest.priceAdjustment > 0) {
+            booking.payment.amount = rescheduleRequest.newTotalAmount;
+            // Note: Student would need to pay the difference
+          }
+        }
+      }
       
       // Update availability slot if exists
       if (booking.slotId) {

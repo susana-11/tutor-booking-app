@@ -60,12 +60,28 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
   }
 
   void _checkPaymentStatus(String url) {
+    print('🔍 Checking payment status for URL: $url');
+    
     // Check if payment was successful or cancelled
-    if (url.contains('success') || url.contains('payment/success')) {
+    // Chapa callback URLs typically contain these patterns
+    if (url.contains('success') || 
+        url.contains('payment/success') ||
+        url.contains('status=success') ||
+        url.contains('/success')) {
+      print('✅ Payment success detected');
       Navigator.pop(context, {'status': 'success', 'reference': widget.reference});
-    } else if (url.contains('cancel') || url.contains('payment/cancel')) {
+    } else if (url.contains('cancel') || 
+               url.contains('payment/cancel') ||
+               url.contains('status=cancel') ||
+               url.contains('/cancel')) {
+      print('❌ Payment cancelled detected');
       Navigator.pop(context, {'status': 'cancelled', 'reference': widget.reference});
-    } else if (url.contains('error') || url.contains('payment/error')) {
+    } else if (url.contains('error') || 
+               url.contains('payment/error') ||
+               url.contains('status=error') ||
+               url.contains('status=failed') ||
+               url.contains('/error')) {
+      print('❌ Payment error detected');
       Navigator.pop(context, {'status': 'failed', 'reference': widget.reference});
     }
   }

@@ -26,6 +26,7 @@ import '../../features/tutor/screens/tutor_earnings_screen.dart';
 import '../../features/tutor/screens/create_tutor_profile_screen.dart';
 import '../../features/tutor/screens/tutor_messages_screen.dart' show TutorMessagesScreen;
 import '../../features/student/screens/tutor_booking_screen.dart';
+import '../../features/student/screens/payment_screen.dart';
 import '../../features/chat/screens/chat_screen.dart';
 import '../../features/student/screens/create_review_screen.dart';
 import '../../features/student/screens/tutor_reviews_screen.dart';
@@ -149,6 +150,17 @@ class AppRouter {
             subject: extra['subject'],
             subjectId: extra['subjectId'] ?? '',
             hourlyRate: extra['hourlyRate'],
+          );
+        },
+      ),
+      GoRoute(
+        path: '/payment',
+        name: 'payment',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return PaymentScreen(
+            bookingId: extra['bookingId'],
+            bookingDetails: extra['bookingDetails'],
           );
         },
       ),

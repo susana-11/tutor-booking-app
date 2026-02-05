@@ -187,7 +187,7 @@ exports.getAvailabilitySlots = async (req, res) => {
 exports.createAvailabilitySlot = async (req, res) => {
   try {
     const tutorId = req.user.userId;
-    const { date, startTime, endTime, isRecurring, recurringPattern, recurringEndDate } = req.body;
+    const { date, startTime, endTime, sessionTypes, isRecurring, recurringPattern, recurringEndDate } = req.body;
 
     // Validate required fields
     if (!date || !startTime || !endTime) {
@@ -195,6 +195,48 @@ exports.createAvailabilitySlot = async (req, res) => {
         success: false,
         message: 'Date, start time, and end time are required'
       });
+    }
+
+    // Validate session types
+    if (!sessionTypes || !Array.isArray(sessionTypes) || sessionTypes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one session type is required'
+      });
+    }
+
+    // Validate each session type
+    for (const sessionType of sessionTypes) {
+      if (!sessionType.type || !['online', 'offline'].includes(sessionType.type)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid session type. Must be "online" or "offline"'
+        });
+      }
+
+      if (!sessionType.hourlyRate || sessionType.hourlyRate <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Hourly rate is required for ${sessionType.type} session`
+        });
+      }
+
+      // Validate offline session requirements
+      if (sessionType.type === 'offline') {
+        if (!sessionType.meetingLocation || sessionType.meetingLocation.trim().length < 5) {
+          return res.status(400).json({
+            success: false,
+            message: 'Meeting location is required for offline sessions (minimum 5 characters)'
+          });
+        }
+
+        if (sessionType.travelDistance === undefined || sessionType.travelDistance < 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Travel distance is required for offline sessions'
+          });
+        }
+      }
     }
 
     // Calculate duration
@@ -206,6 +248,7 @@ exports.createAvailabilitySlot = async (req, res) => {
 
     console.log(`⏰ Time slot: ${startTime} - ${endTime}`);
     console.log(`📊 Duration calculated: ${durationMinutes} minutes`);
+    console.log(`🎯 Session types: ${sessionTypes.map(st => st.type).join(', ')}`);
 
     if (durationMinutes <= 0) {
       return res.status(400).json({
@@ -249,6 +292,13 @@ exports.createAvailabilitySlot = async (req, res) => {
         endTime,
         durationMinutes
       },
+      sessionTypes: sessionTypes.map(st => ({
+        type: st.type,
+        hourlyRate: st.hourlyRate,
+        meetingLocation: st.meetingLocation,
+        travelDistance: st.travelDistance,
+        additionalNotes: st.additionalNotes
+      })),
       isAvailable: true,
       isRecurring: isRecurring || false,
       lastModifiedBy: tutorId
@@ -272,6 +322,7 @@ exports.createAvailabilitySlot = async (req, res) => {
         tutorId: slot.tutorId,
         date: slot.date,
         timeSlot: slot.timeSlot,
+        sessionTypes: slot.sessionTypes,
         isAvailable: slot.isAvailable,
         isRecurring: slot.isRecurring,
         recurringPattern: slot.recurringPattern,
@@ -294,7 +345,7 @@ exports.createAvailabilitySlot = async (req, res) => {
 exports.createBulkAvailability = async (req, res) => {
   try {
     const tutorId = req.user.userId;
-    const { dates, startTime, endTime, isRecurring, recurringPattern } = req.body;
+    const { dates, startTime, endTime, sessionTypes, isRecurring, recurringPattern } = req.body;
 
     if (!dates || !Array.isArray(dates) || dates.length === 0) {
       return res.status(400).json({
@@ -307,6 +358,14 @@ exports.createBulkAvailability = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Start time and end time are required'
+      });
+    }
+
+    // Validate session types
+    if (!sessionTypes || !Array.isArray(sessionTypes) || sessionTypes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one session type is required'
       });
     }
 
@@ -357,6 +416,13 @@ exports.createBulkAvailability = async (req, res) => {
             endTime,
             durationMinutes
           },
+          sessionTypes: sessionTypes.map(st => ({
+            type: st.type,
+            hourlyRate: st.hourlyRate,
+            meetingLocation: st.meetingLocation,
+            travelDistance: st.travelDistance,
+            additionalNotes: st.additionalNotes
+          })),
           isAvailable: true,
           isRecurring: isRecurring || false,
           recurringPattern: isRecurring ? recurringPattern : undefined,
@@ -369,6 +435,7 @@ exports.createBulkAvailability = async (req, res) => {
           tutorId: slot.tutorId,
           date: slot.date,
           timeSlot: slot.timeSlot,
+          sessionTypes: slot.sessionTypes,
           isAvailable: slot.isAvailable,
           isRecurring: slot.isRecurring,
           recurringPattern: slot.recurringPattern,

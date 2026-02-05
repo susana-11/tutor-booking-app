@@ -65,17 +65,29 @@ class AvailabilityService {
     required DateTime date,
     required String startTime,
     required String endTime,
+    required List<Map<String, dynamic>> sessionTypes,
     bool isRecurring = false,
     String? recurringPattern,
+    DateTime? recurringEndDate,
   }) async {
     try {
-      final response = await _apiService.post('/availability/slots', data: {
+      final data = {
         'date': date.toIso8601String(),
         'startTime': startTime,
         'endTime': endTime,
+        'sessionTypes': sessionTypes,
         'isRecurring': isRecurring,
-        'recurringPattern': recurringPattern,
-      });
+      };
+      
+      if (recurringPattern != null) {
+        data['recurringPattern'] = recurringPattern;
+      }
+      
+      if (recurringEndDate != null) {
+        data['recurringEndDate'] = recurringEndDate.toIso8601String();
+      }
+
+      final response = await _apiService.post('/availability/slots', data: data);
 
       if (response.success && response.data != null) {
         final slot = AvailabilitySlot.fromJson(response.data);
@@ -168,17 +180,29 @@ class AvailabilityService {
     required List<DateTime> dates,
     required String startTime,
     required String endTime,
+    required List<Map<String, dynamic>> sessionTypes,
     bool isRecurring = false,
     String? recurringPattern,
+    DateTime? recurringEndDate,
   }) async {
     try {
-      final response = await _apiService.post('/availability/bulk', data: {
+      final data = {
         'dates': dates.map((date) => date.toIso8601String()).toList(),
         'startTime': startTime,
         'endTime': endTime,
+        'sessionTypes': sessionTypes,
         'isRecurring': isRecurring,
-        'recurringPattern': recurringPattern,
-      });
+      };
+      
+      if (recurringPattern != null) {
+        data['recurringPattern'] = recurringPattern;
+      }
+      
+      if (recurringEndDate != null) {
+        data['recurringEndDate'] = recurringEndDate.toIso8601String();
+      }
+
+      final response = await _apiService.post('/availability/bulk', data: data);
 
       if (response.success && response.data != null) {
         final slots = (response.data['slots'] as List)

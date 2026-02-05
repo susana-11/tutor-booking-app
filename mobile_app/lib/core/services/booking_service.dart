@@ -43,21 +43,28 @@ class BookingService {
     required DateTime date,
     required String startTime,
     required String endTime,
-    required String mode, // 'online' or 'in-person'
+    required String mode, // 'online' or 'offline'
+    double? duration, // in hours
+    double? totalAmount, // calculated price
     String? location,
     String? message,
   }) async {
     try {
-      final response = await _apiService.post('/bookings', data: {
+      final data = {
         'tutorId': tutorId,
         'subjectId': subjectId,
         'date': date.toIso8601String(),
         'startTime': startTime,
         'endTime': endTime,
         'mode': mode,
-        'location': location,
-        'message': message,
-      });
+      };
+      
+      if (duration != null) data['duration'] = duration;
+      if (totalAmount != null) data['totalAmount'] = totalAmount;
+      if (location != null) data['location'] = location;
+      if (message != null) data['message'] = message;
+      
+      final response = await _apiService.post('/bookings', data: data);
 
       if (response.success && response.data != null) {
         return ApiResponse.success(response.data);

@@ -2462,10 +2462,34 @@ class _AddAvailabilitySheetState extends State<AddAvailabilitySheet> {
   TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 10, minute: 0);
   bool _recurring = false;
+  DateTime? _recurringEndDate;
+  
+  // Session type options
+  bool _includeOnline = false;
+  bool _includeOffline = false;
+  
+  // Online session pricing
+  final TextEditingController _onlineRateController = TextEditingController(text: '500');
+  
+  // Offline session details
+  final TextEditingController _offlineRateController = TextEditingController(text: '600');
+  final TextEditingController _meetingLocationController = TextEditingController();
+  final TextEditingController _travelDistanceController = TextEditingController(text: '0');
+  final TextEditingController _additionalNotesController = TextEditingController();
   
   final List<String> _days = [
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
   ];
+
+  @override
+  void dispose() {
+    _onlineRateController.dispose();
+    _offlineRateController.dispose();
+    _meetingLocationController.dispose();
+    _travelDistanceController.dispose();
+    _additionalNotesController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2611,6 +2635,147 @@ class _AddAvailabilitySheetState extends State<AddAvailabilitySheet> {
             onChanged: (value) => setState(() => _recurring = value),
           ),
           
+          // Recurring End Date (if recurring is enabled)
+          if (_recurring) ...[
+            const SizedBox(height: AppTheme.spacingMD),
+            InkWell(
+              onTap: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _recurringEndDate ?? DateTime.now().add(const Duration(days: 84)), // 12 weeks
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (date != null) {
+                  setState(() => _recurringEndDate = date);
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Recurring End Date',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.calendar_today),
+                ),
+                child: Text(
+                  _recurringEndDate != null
+                      ? '${_recurringEndDate!.day}/${_recurringEndDate!.month}/${_recurringEndDate!.year}'
+                      : 'Select end date (optional)',
+                ),
+              ),
+            ),
+          ],
+          
+          const SizedBox(height: AppTheme.spacingXL),
+          
+          // Session Types Section
+          Text(
+            'Session Types & Pricing',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingSM),
+          Text(
+            'Select at least one session type',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.grey[600],
+            ),
+          ),
+          
+          const SizedBox(height: AppTheme.spacingMD),
+          
+          // Online Session Option
+          CheckboxListTile(
+            title: const Text('Online Session'),
+            subtitle: const Text('Video call via the app'),
+            value: _includeOnline,
+            onChanged: (value) => setState(() => _includeOnline = value ?? false),
+            secondary: const Icon(Icons.videocam, color: AppTheme.primaryColor),
+          ),
+          
+          // Online Rate Input
+          if (_includeOnline) ...[
+            Padding(
+              padding: const EdgeInsets.only(left: AppTheme.spacingXL, right: AppTheme.spacingMD),
+              child: TextField(
+                controller: _onlineRateController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Hourly Rate (ETB)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.attach_money),
+                  helperText: 'Your rate for online sessions',
+                ),
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingMD),
+          ],
+          
+          // Offline Session Option
+          CheckboxListTile(
+            title: const Text('Offline Session'),
+            subtitle: const Text('In-person meeting'),
+            value: _includeOffline,
+            onChanged: (value) => setState(() => _includeOffline = value ?? false),
+            secondary: const Icon(Icons.location_on, color: AppTheme.accentColor),
+          ),
+          
+          // Offline Session Details
+          if (_includeOffline) ...[
+            Padding(
+              padding: const EdgeInsets.only(left: AppTheme.spacingXL, right: AppTheme.spacingMD),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _offlineRateController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Hourly Rate (ETB)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.attach_money),
+                      helperText: 'Your rate for offline sessions',
+                    ),
+                  ),
+                  const SizedBox(height: AppTheme.spacingMD),
+                  TextField(
+                    controller: _meetingLocationController,
+                    decoration: const InputDecoration(
+                      labelText: 'Meeting Location *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.place),
+                      helperText: 'Where will you meet? (5-200 characters)',
+                    ),
+                    maxLength: 200,
+                  ),
+                  const SizedBox(height: AppTheme.spacingMD),
+                  TextField(
+                    controller: _travelDistanceController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Travel Distance (km)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.directions_car),
+                      helperText: 'Maximum distance you can travel (0-100 km)',
+                    ),
+                  ),
+                  const SizedBox(height: AppTheme.spacingMD),
+                  TextField(
+                    controller: _additionalNotesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Additional Notes (Optional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.note),
+                      helperText: 'Any additional information',
+                    ),
+                    maxLines: 2,
+                    maxLength: 500,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingMD),
+          ],
+          
           const SizedBox(height: AppTheme.spacingXL),
           
           // Action Buttons
@@ -2669,6 +2834,84 @@ class _AddAvailabilitySheetState extends State<AddAvailabilitySheet> {
         return;
       }
       
+      // Validate at least one session type is selected
+      if (!_includeOnline && !_includeOffline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select at least one session type (Online or Offline)'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      // Build session types array
+      final sessionTypes = <Map<String, dynamic>>[];
+      
+      // Add online session type
+      if (_includeOnline) {
+        final onlineRate = double.tryParse(_onlineRateController.text) ?? 0;
+        if (onlineRate <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Online hourly rate must be greater than 0'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        
+        sessionTypes.add({
+          'type': 'online',
+          'hourlyRate': onlineRate,
+        });
+      }
+      
+      // Add offline session type
+      if (_includeOffline) {
+        final offlineRate = double.tryParse(_offlineRateController.text) ?? 0;
+        if (offlineRate <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Offline hourly rate must be greater than 0'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        
+        final meetingLocation = _meetingLocationController.text.trim();
+        if (meetingLocation.isEmpty || meetingLocation.length < 5) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Meeting location must be at least 5 characters'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        
+        final travelDistance = double.tryParse(_travelDistanceController.text) ?? 0;
+        if (travelDistance < 0 || travelDistance > 100) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Travel distance must be between 0 and 100 km'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        
+        sessionTypes.add({
+          'type': 'offline',
+          'hourlyRate': offlineRate,
+          'meetingLocation': meetingLocation,
+          'travelDistance': travelDistance,
+          if (_additionalNotesController.text.trim().isNotEmpty)
+            'additionalNotes': _additionalNotesController.text.trim(),
+        });
+      }
+      
       // Convert TimeOfDay to string format
       final startTimeStr = '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}';
       final endTimeStr = '${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}';
@@ -2683,16 +2926,22 @@ class _AddAvailabilitySheetState extends State<AddAvailabilitySheet> {
       final availabilityService = AvailabilityService();
       
       if (_recurring) {
+        // Calculate end date for recurring availability
+        final endDate = _recurringEndDate ?? now.add(const Duration(days: 84)); // Default 12 weeks
+        
         // Create multiple slots for recurring availability
         final dates = <DateTime>[];
-        for (int i = 0; i < 12; i++) { // Create for next 12 weeks
-          dates.add(targetDate.add(Duration(days: i * 7)));
+        DateTime currentDate = targetDate;
+        while (currentDate.isBefore(endDate) || currentDate.isAtSameMomentAs(endDate)) {
+          dates.add(currentDate);
+          currentDate = currentDate.add(const Duration(days: 7));
         }
         
         final response = await availabilityService.createBulkAvailability(
           dates: dates,
           startTime: startTimeStr,
           endTime: endTimeStr,
+          sessionTypes: sessionTypes,
           isRecurring: true,
           recurringPattern: 'weekly',
         );
@@ -2711,6 +2960,7 @@ class _AddAvailabilitySheetState extends State<AddAvailabilitySheet> {
           date: targetDate,
           startTime: startTimeStr,
           endTime: endTimeStr,
+          sessionTypes: sessionTypes,
           isRecurring: false,
         );
         

@@ -6,22 +6,25 @@ class EscrowService {
   constructor() {
     // Escrow configuration (can be overridden by environment variables)
     this.config = {
-      // Release delay after session completion (in hours)
-      releaseDelayHours: parseInt(process.env.ESCROW_RELEASE_DELAY_HOURS) || 1, // Default 1 hour for testing
+      // Release delay after session completion (in minutes for testing, hours for production)
+      releaseDelayMinutes: parseInt(process.env.ESCROW_RELEASE_DELAY_MINUTES) || 10, // Default 10 minutes for testing
       
       // Cancellation refund rules (hours before session)
+      // For testing: 1 hour threshold (production: 24 hours)
       refundRules: {
-        full: parseInt(process.env.ESCROW_REFUND_FULL_HOURS) || 24,      // 100% refund if cancelled 24+ hours before
-        partial: parseInt(process.env.ESCROW_REFUND_PARTIAL_HOURS) || 12, // 50% refund if cancelled 12-24 hours before
+        full: parseInt(process.env.ESCROW_REFUND_FULL_HOURS) || 1,      // 100% refund if cancelled 1+ hours before (testing)
+        partial: parseInt(process.env.ESCROW_REFUND_PARTIAL_HOURS) || 0.5, // 50% refund if cancelled 0.5-1 hours before (testing)
         partialPercentage: parseInt(process.env.ESCROW_REFUND_PARTIAL_PERCENT) || 50, // 50% refund
-        none: parseInt(process.env.ESCROW_REFUND_NONE_HOURS) || 12        // 0% refund if less than 12 hours before
+        none: parseInt(process.env.ESCROW_REFUND_NONE_HOURS) || 0.5        // 0% refund if less than 0.5 hours (30 min) before
       },
       
       // Scheduler frequency (in minutes)
-      schedulerFrequency: parseInt(process.env.ESCROW_SCHEDULER_FREQUENCY) || 10 // Check every 10 minutes for testing
+      schedulerFrequency: parseInt(process.env.ESCROW_SCHEDULER_FREQUENCY) || 5 // Check every 5 minutes for testing
     };
     
     console.log('⚙️ Escrow Service Configuration:', this.config);
+    console.log(`   Dispute window: ${this.config.releaseDelayMinutes} minutes`);
+    console.log(`   Scheduler runs every: ${this.config.schedulerFrequency} minutes`);
     this.startScheduler();
   }
 

@@ -10,6 +10,7 @@ import '../../../core/services/session_service.dart';
 import '../../../core/widgets/session_action_button.dart';
 import '../../../core/widgets/reschedule_request_dialog.dart';
 import '../../../core/widgets/reschedule_requests_dialog.dart';
+import '../../../core/widgets/cancel_booking_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class StudentBookingsScreen extends StatefulWidget {
@@ -1495,55 +1496,46 @@ class _StudentBookingsScreenState extends State<StudentBookingsScreen>
   }
 
   Future<void> _cancelSession(Map<String, dynamic> booking) async {
-    final tutorName = booking['tutorName'] ?? 'tutor';
-    final confirmed = await showDialog<bool>(
+    // Check if session can be cancelled
+    final status = booking['status'];
+    final sessionStarted = booking['sessionStartedAt'] != null || 
+                          booking['session']?['isActive'] == true ||
+                          booking['checkIn']?['bothCheckedIn'] == true;
+    
+    if (sessionStarted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot cancel - session has already started'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (!['pending', 'confirmed'].contains(status)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cannot cancel booking with status: $status'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Show cancel dialog with refund information
+    final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel Session'),
-        content: Text('Are you sure you want to cancel this session with $tutorName?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep Session'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Cancel Session'),
-          ),
-        ],
+      builder: (context) => CancelBookingDialog(
+        bookingId: booking['_id'] ?? booking['id'],
+        bookingDetails: booking,
+        onCancelled: () {
+          _loadBookings();
+        },
       ),
     );
 
-    if (confirmed == true) {
-      try {
-        final bookingId = booking['_id'] ?? booking['id'];
-        final response = await _bookingService.cancelBooking(
-          bookingId: bookingId,
-          reason: 'Student cancelled',
-        );
-        
-        if (response.success) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Session cancelled successfully')),
-            );
-            _loadBookings();
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to cancel: ${response.error}')),
-            );
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to cancel: $e')),
-          );
-        }
-      }
+    if (result == true && mounted) {
+      _loadBookings();
     }
   }
 

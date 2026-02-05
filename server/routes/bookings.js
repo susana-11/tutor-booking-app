@@ -131,7 +131,7 @@ router.post('/', authenticate, async (req, res) => {
     const TutorProfile = require('../models/TutorProfile');
     const Subject = require('../models/Subject');
 
-    let { tutorId, subjectId, date, startTime, endTime, mode, location, message } = req.body;
+    let { tutorId, subjectId, date, startTime, endTime, mode, location, message, duration, totalAmount, sessionType } = req.body;
 
     // Validate required fields
     if (!tutorId || !subjectId || !date || !startTime || !endTime) {
@@ -192,14 +192,19 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
-    // Calculate duration in minutes
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin] = endTime.split(':').map(Number);
-    const duration = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+    // Calculate duration in minutes (use provided duration or calculate from times)
+    let calculatedDuration;
+    if (duration) {
+      calculatedDuration = duration;
+    } else {
+      const [startHour, startMin] = startTime.split(':').map(Number);
+      const [endHour, endMin] = endTime.split(':').map(Number);
+      calculatedDuration = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+    }
 
-    // Calculate price
+    // Calculate price (use provided totalAmount or calculate)
     const pricePerHour = tutorProfile.pricing?.hourlyRate || 45;
-    const totalAmount = (pricePerHour * duration) / 60;
+    const calculatedTotalAmount = totalAmount || (pricePerHour * calculatedDuration) / 60;
 
     const bookingData = {
       studentId: req.user.userId,
@@ -212,16 +217,21 @@ router.post('/', authenticate, async (req, res) => {
       sessionDate: new Date(date),
       startTime,
       endTime,
-      duration,
-      sessionType: mode || 'online',
+      duration: calculatedDuration,
+      sessionType: sessionType || mode || 'online',
       pricePerHour,
-      totalAmount,
-      status: 'pending',
+      totalAmount: calculatedTotalAmount,
+      status: 'pending', // Will change to 'confirmed' after payment
       paymentStatus: 'pending',
       payment: {
-        amount: totalAmount,
+        amount: calculatedTotalAmount,
         status: 'pending',
         method: 'chapa'
+      },
+      escrow: {
+        status: 'pending',
+        autoReleaseEnabled: true,
+        releaseDelayMinutes: 10 // 10 minutes dispute window for testing
       },
       notes: {
         student: message || ''
@@ -229,7 +239,7 @@ router.post('/', authenticate, async (req, res) => {
     };
 
     // Only add location for in-person sessions
-    if (mode === 'in-person' && location) {
+    if ((mode === 'in-person' || sessionType === 'inPerson') && location) {
       bookingData.location = location;
     }
 
@@ -243,8 +253,12 @@ router.post('/', authenticate, async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Booking created successfully',
-      data: { booking }
+      message: 'Booking created. Please complete payment.',
+      data: { 
+        booking,
+        requiresPayment: true,
+        bookingId: booking._id.toString()
+      }
     });
   } catch (error) {
     console.error('Create booking error:', error);
