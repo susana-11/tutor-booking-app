@@ -33,6 +33,12 @@ import '../../features/student/screens/my_reviews_screen.dart';
 import '../../features/tutor/screens/tutor_reviews_management_screen.dart';
 import '../../features/student/screens/student_notifications_screen.dart';
 import '../../features/tutor/screens/tutor_notifications_screen.dart';
+import '../../features/tutor/screens/notification_preferences_screen.dart';
+import '../../features/support/screens/help_support_screen.dart';
+import '../../features/support/screens/create_ticket_screen.dart';
+import '../../features/support/screens/my_tickets_screen.dart';
+import '../../features/support/screens/ticket_detail_screen.dart';
+import '../../features/support/screens/faq_screen.dart';
 import '../../features/session/screens/active_session_screen.dart';
 
 class AppRouter {
@@ -249,6 +255,42 @@ class AppRouter {
         path: '/tutor-notifications',
         name: 'tutor-notifications',
         builder: (context, state) => const TutorNotificationsScreen(),
+      ),
+      
+      GoRoute(
+        path: '/notification-preferences',
+        name: 'notification-preferences',
+        builder: (context, state) => const NotificationPreferencesScreen(),
+      ),
+      
+      // Support Routes
+      GoRoute(
+        path: '/support',
+        name: 'support',
+        builder: (context, state) => const HelpSupportScreen(),
+      ),
+      GoRoute(
+        path: '/support/create-ticket',
+        name: 'create-ticket',
+        builder: (context, state) => const CreateTicketScreen(),
+      ),
+      GoRoute(
+        path: '/support/tickets',
+        name: 'my-tickets',
+        builder: (context, state) => const MyTicketsScreen(),
+      ),
+      GoRoute(
+        path: '/support/tickets/:ticketId',
+        name: 'ticket-detail',
+        builder: (context, state) {
+          final ticketId = state.pathParameters['ticketId']!;
+          return TicketDetailScreen(ticketId: ticketId);
+        },
+      ),
+      GoRoute(
+        path: '/support/faqs',
+        name: 'faqs',
+        builder: (context, state) => const FAQScreen(),
       ),
     ],
   );

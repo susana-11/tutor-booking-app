@@ -7,7 +7,10 @@ import 'dart:io';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/profile_service.dart';
 import '../../../core/services/tutor_service.dart';
+import '../../../core/widgets/change_password_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../support/screens/help_support_screen.dart';
+import 'notification_preferences_screen.dart';
 
 class TutorProfileScreen extends StatefulWidget {
   const TutorProfileScreen({super.key});
@@ -736,7 +739,10 @@ class _TutorProfileScreenState extends State<TutorProfileScreen> {
                 title: const Text('View Analytics'),
                 subtitle: const Text('See your performance metrics'),
                 trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () => context.push('/tutor-analytics'),
+                onTap: () {
+                  // Navigate to earnings screen with analytics tab
+                  context.push('/tutor-earnings');
+                },
               ),
               
               ListTile(
@@ -1101,23 +1107,25 @@ class _TutorProfileScreenState extends State<TutorProfileScreen> {
   }
 
   void _manageNotifications() {
-    // TODO: Navigate to notification settings
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Notification settings coming soon!')),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const NotificationPreferencesScreen(),
+      ),
     );
   }
 
   void _changePassword() {
-    // TODO: Navigate to change password screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Change password coming soon!')),
+    showDialog(
+      context: context,
+      builder: (context) => const ChangePasswordDialog(),
     );
   }
 
   void _getHelp() {
-    // TODO: Navigate to help screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Help & support coming soon!')),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const HelpSupportScreen(),
+      ),
     );
   }
 

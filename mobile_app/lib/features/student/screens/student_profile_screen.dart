@@ -8,7 +8,10 @@ import 'dart:math' as math;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/profile_service.dart';
 import '../../../core/providers/theme_provider.dart';
+import '../../../core/widgets/change_password_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../tutor/screens/notification_preferences_screen.dart';
+import '../../support/screens/help_support_screen.dart';
 
 class StudentProfileScreen extends StatefulWidget {
   const StudentProfileScreen({Key? key}) : super(key: key);
@@ -1215,23 +1218,25 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
   }
 
   void _manageNotifications() {
-    // TODO: Navigate to notification settings
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Notification settings coming soon!')),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const NotificationPreferencesScreen(),
+      ),
     );
   }
 
   void _changePassword() {
-    // TODO: Navigate to change password screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Change password coming soon!')),
+    showDialog(
+      context: context,
+      builder: (context) => const ChangePasswordDialog(),
     );
   }
 
   void _getHelp() {
-    // TODO: Navigate to help screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Help & support coming soon!')),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const HelpSupportScreen(),
+      ),
     );
   }
 
