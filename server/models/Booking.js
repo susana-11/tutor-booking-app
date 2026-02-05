@@ -57,7 +57,10 @@ const bookingSchema = new mongoose.Schema({
     type: {
       type: String,
       enum: ['student_location', 'tutor_location', 'public_place', 'custom'],
-      default: 'public_place'
+      required: function() {
+        // Only require location type for in-person sessions
+        return this.sessionType === 'inPerson';
+      }
     },
     address: String,
     city: String,

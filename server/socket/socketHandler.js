@@ -72,6 +72,9 @@ class SocketHandler {
         
         // Notify user is offline
         this.broadcastUserStatus(socket.userId, 'offline');
+        
+        // ✅ Remove all listeners to prevent "cannot add new event" errors
+        socket.removeAllListeners();
       });
     });
   }
@@ -474,19 +477,37 @@ class SocketHandler {
 
   // Utility methods
   broadcastUserStatus(userId, status) {
-    this.io.emit('user_status_change', {
-      userId,
-      status,
-      timestamp: new Date()
-    });
+    try {
+      if (this.io && this.io.sockets) {
+        this.io.emit('user_status_change', {
+          userId,
+          status,
+          timestamp: new Date()
+        });
+      }
+    } catch (error) {
+      console.error('⚠️ Error broadcasting user status:', error.message);
+    }
   }
 
   sendNotificationToUser(userId, notification) {
-    const socketId = this.connectedUsers.get(userId);
-    if (socketId) {
-      this.io.to(socketId).emit('notification', notification);
-    } else {
-      // Send push notification if user is offline
+    try {
+      const socketId = this.connectedUsers.get(userId);
+      if (socketId && this.io && this.io.sockets) {
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (socket && socket.connected) {
+          socket.emit('notification', notification);
+        } else {
+          // Socket not connected, send push notification
+          this.sendPushNotification(userId, notification);
+        }
+      } else {
+        // Send push notification if user is offline
+        this.sendPushNotification(userId, notification);
+      }
+    } catch (error) {
+      console.error('⚠️ Error sending notification to user:', error.message);
+      // Fallback to push notification
       this.sendPushNotification(userId, notification);
     }
   }
@@ -498,7 +519,13 @@ class SocketHandler {
   }
 
   broadcastToRole(role, event, data) {
-    this.io.to(`role_${role}`).emit(event, data);
+    try {
+      if (this.io && this.io.sockets) {
+        this.io.to(`role_${role}`).emit(event, data);
+      }
+    } catch (error) {
+      console.error('⚠️ Error broadcasting to role:', error.message);
+    }
   }
 
   getConnectedUsers() {

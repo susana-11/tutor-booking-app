@@ -266,7 +266,7 @@ router.get('/:id', async (req, res) => {
 
     res.json({
       success: true,
-      data: { tutor: tutorData }
+      data: tutorData
     });
   } catch (error) {
     console.error('Get tutor error:', error);

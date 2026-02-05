@@ -214,7 +214,6 @@ router.post('/', authenticate, async (req, res) => {
       endTime,
       duration,
       sessionType: mode || 'online',
-      location: mode === 'in-person' ? location : null,
       pricePerHour,
       totalAmount,
       status: 'pending',
@@ -228,6 +227,11 @@ router.post('/', authenticate, async (req, res) => {
         student: message || ''
       }
     };
+
+    // Only add location for in-person sessions
+    if (mode === 'in-person' && location) {
+      bookingData.location = location;
+    }
 
     const booking = new Booking(bookingData);
     await booking.save();

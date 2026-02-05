@@ -716,6 +716,30 @@ exports.clearChat = async (req, res) => {
 
     console.log(`✅ Chat cleared for user ${userId}`);
 
+    // ✅ EMIT SOCKET EVENT BEFORE SENDING RESPONSE (to avoid socket closed error)
+    try {
+      const io = req.app.get('io');
+      if (io && io.sockets) {
+        // Notify other participants that chat was cleared
+        const otherParticipant = conversation.participants.find(
+          p => p.userId.toString() !== userId.toString()
+        );
+        
+        if (otherParticipant) {
+          const recipientId = otherParticipant.userId.toString();
+          io.to(`user_${recipientId}`).emit('chat_cleared', {
+            conversationId,
+            clearedBy: userId,
+            timestamp: new Date()
+          });
+          console.log(`✅ Socket event emitted to user_${recipientId}`);
+        }
+      }
+    } catch (socketError) {
+      // Log but don't fail the request if socket emit fails
+      console.error('⚠️ Socket emit error (non-critical):', socketError.message);
+    }
+
     res.json({
       success: true,
       message: 'Chat cleared successfully'
