@@ -319,20 +319,335 @@ exports.activateUser = async (req, res) => {
 // Get dashboard stats
 exports.getDashboardStats = async (req, res) => {
   try {
+    const Booking = require('../models/Booking');
+    const Transaction = require('../models/Transaction');
+    const Subject = require('../models/Subject');
+
+    // User stats
     const totalUsers = await User.countDocuments();
     const totalStudents = await User.countDocuments({ role: 'student' });
     const totalTutors = await User.countDocuments({ role: 'tutor' });
+    const activeUsers = await User.countDocuments({ isActive: true });
+    const newUsersThisMonth = await User.countDocuments({
+      createdAt: { $gte: new Date(new Date().setDate(1)) }
+    });
+
+    // Tutor stats
     const pendingTutors = await TutorProfile.countDocuments({ status: 'pending' });
     const approvedTutors = await TutorProfile.countDocuments({ status: 'approved' });
+    const rejectedTutors = await TutorProfile.countDocuments({ status: 'rejected' });
+
+    // Booking stats
+    const totalBookings = await Booking.countDocuments();
+    const pendingBookings = await Booking.countDocuments({ status: 'pending' });
+    const confirmedBookings = await Booking.countDocuments({ status: 'confirmed' });
+    const completedBookings = await Booking.countDocuments({ status: 'completed' });
+    const cancelledBookings = await Booking.countDocuments({ status: 'cancelled' });
+    const bookingsThisMonth = await Booking.countDocuments({
+      createdAt: { $gte: new Date(new Date().setDate(1)) }
+    });
+
+    // Revenue stats
+    const revenueData = await Booking.aggregate([
+      { $match: { status: 'completed', paymentStatus: 'paid' } },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$totalAmount' },
+          platformRevenue: { $sum: '$platformFee' },
+          tutorEarnings: { $sum: '$tutorEarnings' }
+        }
+      }
+    ]);
+
+    const revenue = revenueData[0] || {
+      totalRevenue: 0,
+      platformRevenue: 0,
+      tutorEarnings: 0
+    };
+
+    // Monthly revenue
+    const monthlyRevenue = await Booking.aggregate([
+      {
+        $match: {
+          status: 'completed',
+          paymentStatus: 'paid',
+          createdAt: { $gte: new Date(new Date().setDate(1)) }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$totalAmount' },
+          platformFee: { $sum: '$platformFee' }
+        }
+      }
+    ]);
+
+    const thisMonthRevenue = monthlyRevenue[0] || { total: 0, platformFee: 0 };
+
+    // Subject stats
+    const totalSubjects = await Subject.countDocuments();
+    const activeSubjects = await Subject.countDocuments({ isActive: true });
+
+    // Recent activity
+    const recentBookings = await Booking.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate('studentId', 'firstName lastName')
+      .populate('tutorId', 'firstName lastName')
+      .select('status sessionDate startTime subject.name totalAmount createdAt');
+
+    const recentUsers = await User.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('firstName lastName email role createdAt');
 
     res.json({
-      totalUsers,
-      totalStudents,
-      totalTutors,
-      pendingTutors,
-      approvedTutors,
+      success: true,
+      data: {
+        users: {
+          total: totalUsers,
+          students: totalStudents,
+          tutors: totalTutors,
+          active: activeUsers,
+          newThisMonth: newUsersThisMonth
+        },
+        tutors: {
+          pending: pendingTutors,
+          approved: approvedTutors,
+          rejected: rejectedTutors,
+          total: pendingTutors + approvedTutors + rejectedTutors
+        },
+        bookings: {
+          total: totalBookings,
+          pending: pendingBookings,
+          confirmed: confirmedBookings,
+          completed: completedBookings,
+          cancelled: cancelledBookings,
+          thisMonth: bookingsThisMonth
+        },
+        revenue: {
+          total: revenue.totalRevenue,
+          platform: revenue.platformRevenue,
+          tutors: revenue.tutorEarnings,
+          thisMonth: thisMonthRevenue.total,
+          platformThisMonth: thisMonthRevenue.platformFee
+        },
+        subjects: {
+          total: totalSubjects,
+          active: activeSubjects
+        },
+        recentActivity: {
+          bookings: recentBookings,
+          users: recentUsers
+        }
+      }
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Get dashboard stats error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
+
+// Get all bookings with filters
+exports.getAllBookings = async (req, res) => {
+  try {
+    const Booking = require('../models/Booking');
+    const { status, page = 1, limit = 20, search } = req.query;
+
+    let filter = {};
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    const bookings = await Booking.find(filter)
+      .populate('studentId', 'firstName lastName email phone')
+      .populate('tutorId', 'firstName lastName email phone')
+      .populate('tutorProfileId', 'bio subjects')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Booking.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: {
+        bookings,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get all bookings error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
+
+// Get all transactions
+exports.getAllTransactions = async (req, res) => {
+  try {
+    const Transaction = require('../models/Transaction');
+    const { type, status, page = 1, limit = 20 } = req.query;
+
+    let filter = {};
+    if (type && type !== 'all') filter.type = type;
+    if (status && status !== 'all') filter.status = status;
+
+    const transactions = await Transaction.find(filter)
+      .populate('userId', 'firstName lastName email')
+      .populate('bookingId', 'sessionDate subject.name')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Transaction.countDocuments(filter);
+
+    // Calculate totals
+    const totals = await Transaction.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: '$amount' },
+          totalNet: { $sum: '$netAmount' }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        transactions,
+        totals: totals[0] || { totalAmount: 0, totalNet: 0 },
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get all transactions error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
+
+// Get analytics data
+exports.getAnalytics = async (req, res) => {
+  try {
+    const Booking = require('../models/Booking');
+    const { period = '30' } = req.query; // days
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(period));
+
+    // Bookings over time
+    const bookingsOverTime = await Booking.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          count: { $sum: 1 },
+          revenue: { $sum: '$totalAmount' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Revenue by status
+    const revenueByStatus = await Booking.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          revenue: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    // Top subjects
+    const topSubjects = await Booking.aggregate([
+      { $match: { createdAt: { $gte: startDate }, status: 'completed' } },
+      {
+        $group: {
+          _id: '$subject.name',
+          count: { $sum: 1 },
+          revenue: { $sum: '$totalAmount' }
+        }
+      },
+      { $sort: { count: -1 } },
+      { $limit: 10 }
+    ]);
+
+    // Top tutors
+    const topTutors = await Booking.aggregate([
+      { $match: { createdAt: { $gte: startDate }, status: 'completed' } },
+      {
+        $group: {
+          _id: '$tutorId',
+          sessions: { $sum: 1 },
+          earnings: { $sum: '$tutorEarnings' },
+          revenue: { $sum: '$totalAmount' }
+        }
+      },
+      { $sort: { sessions: -1 } },
+      { $limit: 10 }
+    ]);
+
+    // Populate tutor details
+    const populatedTopTutors = await User.populate(topTutors, {
+      path: '_id',
+      select: 'firstName lastName email'
+    });
+
+    // User growth
+    const userGrowth = await User.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            role: '$role'
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id.date': 1 } }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        bookingsOverTime,
+        revenueByStatus,
+        topSubjects,
+        topTutors: populatedTopTutors,
+        userGrowth,
+        period: parseInt(period)
+      }
+    });
+  } catch (error) {
+    console.error('Get analytics error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };

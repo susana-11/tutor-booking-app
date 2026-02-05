@@ -23,4 +23,13 @@ router.post('/users/:userId/activate', adminController.activateUser);
 // Dashboard stats
 router.get('/stats', adminController.getDashboardStats);
 
+// Booking management
+router.get('/bookings', adminController.getAllBookings);
+
+// Transaction management
+router.get('/transactions', adminController.getAllTransactions);
+
+// Analytics
+router.get('/analytics', adminController.getAnalytics);
+
 module.exports = router;
