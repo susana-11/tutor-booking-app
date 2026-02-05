@@ -12,11 +12,10 @@ exports.getAllSubjects = async (req, res) => {
     }
 
     if (gradeLevel) {
-      filter.gradeLevels = { $in: [gradeLevel] };
+      filter.gradelevels = { $in: [gradeLevel] };
     }
 
     const subjects = await Subject.find(filter)
-      .populate('createdBy', 'firstName lastName')
       .sort({ category: 1, name: 1 });
 
     res.json(subjects);
@@ -30,8 +29,7 @@ exports.getSubjectById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const subject = await Subject.findById(id)
-      .populate('createdBy', 'firstName lastName');
+    const subject = await Subject.findById(id);
 
     if (!subject) {
       return res.status(404).json({ message: 'Subject not found' });
@@ -46,12 +44,14 @@ exports.getSubjectById = async (req, res) => {
 // Admin: Create new subject
 exports.createSubject = async (req, res) => {
   try {
-    const { name, description, category, gradeLevels } = req.body;
-    const createdBy = req.user.userId;
+    const { name, description, category, gradeLevel, isActive } = req.body;
 
     // Validation
     if (!name) {
-      return res.status(400).json({ message: 'Subject name is required' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Subject name is required' 
+      });
     }
 
     // Check if subject already exists
@@ -60,26 +60,33 @@ exports.createSubject = async (req, res) => {
     });
 
     if (existingSubject) {
-      return res.status(400).json({ message: 'Subject already exists' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Subject already exists' 
+      });
     }
 
     const subject = new Subject({
       name: name.trim(),
       description,
-      category: category || 'other',
-      gradeLevels: gradeLevels || [],
-      createdBy,
+      category: category || 'Other',
+      gradelevels: gradeLevel || [],
+      isActive: isActive !== undefined ? isActive : true,
     });
 
     await subject.save();
-    await subject.populate('createdBy', 'firstName lastName');
 
     res.status(201).json({
+      success: true,
       message: 'Subject created successfully',
-      subject,
+      data: subject,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error creating subject:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };
 
@@ -87,12 +94,15 @@ exports.createSubject = async (req, res) => {
 exports.updateSubject = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, category, gradeLevels, isActive } = req.body;
+    const { name, description, category, gradeLevel, isActive } = req.body;
 
     const subject = await Subject.findById(id);
 
     if (!subject) {
-      return res.status(404).json({ message: 'Subject not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Subject not found' 
+      });
     }
 
     // Check if name is being changed and if it conflicts
@@ -103,25 +113,32 @@ exports.updateSubject = async (req, res) => {
       });
 
       if (existingSubject) {
-        return res.status(400).json({ message: 'Subject name already exists' });
+        return res.status(400).json({ 
+          success: false,
+          message: 'Subject name already exists' 
+        });
       }
       subject.name = name.trim();
     }
 
     if (description !== undefined) subject.description = description;
     if (category) subject.category = category;
-    if (gradeLevels) subject.gradeLevels = gradeLevels;
+    if (gradeLevel) subject.gradelevels = gradeLevel;
     if (isActive !== undefined) subject.isActive = isActive;
 
     await subject.save();
-    await subject.populate('createdBy', 'firstName lastName');
 
     res.json({
+      success: true,
       message: 'Subject updated successfully',
-      subject,
+      data: subject,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error updating subject:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };
 
@@ -133,16 +150,26 @@ exports.deleteSubject = async (req, res) => {
     const subject = await Subject.findById(id);
 
     if (!subject) {
-      return res.status(404).json({ message: 'Subject not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Subject not found' 
+      });
     }
 
     // Soft delete - just mark as inactive
     subject.isActive = false;
     await subject.save();
 
-    res.json({ message: 'Subject deactivated successfully' });
+    res.json({ 
+      success: true,
+      message: 'Subject deactivated successfully' 
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error deleting subject:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };
 
@@ -162,7 +189,6 @@ exports.getAllSubjectsAdmin = async (req, res) => {
     }
 
     const subjects = await Subject.find(filter)
-      .populate('createdBy', 'firstName lastName')
       .sort({ category: 1, name: 1 });
 
     res.json({
@@ -183,13 +209,12 @@ exports.getAllSubjectsAdmin = async (req, res) => {
 exports.getGradeLevels = async (req, res) => {
   try {
     const gradeLevels = [
-      { value: 'elementary', label: 'Elementary (K-5)' },
-      { value: 'middle_school', label: 'Middle School (6-8)' },
-      { value: 'high_school', label: 'High School (9-12)' },
-      { value: 'college', label: 'College' },
-      { value: 'university', label: 'University' },
-      { value: 'graduate', label: 'Graduate' },
-      { value: 'professional', label: 'Professional' },
+      { value: 'Elementary (K-5)', label: 'Elementary (K-5)' },
+      { value: 'Middle School (6-8)', label: 'Middle School (6-8)' },
+      { value: 'High School (9-12)', label: 'High School (9-12)' },
+      { value: 'College/University', label: 'College/University' },
+      { value: 'Adult/Professional', label: 'Adult/Professional' },
+      { value: 'All Levels', label: 'All Levels' },
     ];
 
     res.json(gradeLevels);
@@ -202,13 +227,18 @@ exports.getGradeLevels = async (req, res) => {
 exports.getCategories = async (req, res) => {
   try {
     const categories = [
-      { value: 'mathematics', label: 'Mathematics' },
-      { value: 'sciences', label: 'Sciences' },
-      { value: 'languages', label: 'Languages' },
-      { value: 'humanities', label: 'Humanities' },
-      { value: 'arts', label: 'Arts' },
-      { value: 'technology', label: 'Technology' },
-      { value: 'other', label: 'Other' },
+      { value: 'Mathematics', label: 'Mathematics' },
+      { value: 'Sciences', label: 'Sciences' },
+      { value: 'Languages', label: 'Languages' },
+      { value: 'Social Studies', label: 'Social Studies' },
+      { value: 'Arts & Humanities', label: 'Arts & Humanities' },
+      { value: 'Technology & Computing', label: 'Technology & Computing' },
+      { value: 'Business & Economics', label: 'Business & Economics' },
+      { value: 'Test Preparation', label: 'Test Preparation' },
+      { value: 'Music & Performing Arts', label: 'Music & Performing Arts' },
+      { value: 'Sports & Fitness', label: 'Sports & Fitness' },
+      { value: 'Life Skills', label: 'Life Skills' },
+      { value: 'Other', label: 'Other' },
     ];
 
     res.json(categories);
