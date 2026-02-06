@@ -65,23 +65,16 @@ class _AddBalanceScreenState extends State<AddBalanceScreen> {
 
       if (result['success']) {
         final checkoutUrl = result['data']['checkoutUrl'];
+        final reference = result['data']['reference'];
         
         // Launch Chapa checkout
         final uri = Uri.parse(checkoutUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
           
-          // Show success message
+          // Show waiting dialog
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Complete payment in the browser'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            
-            // Return to wallet screen
-            context.pop(true);
+            _showPaymentWaitingDialog(reference, amount);
           }
         } else {
           throw Exception('Could not launch payment URL');
@@ -109,6 +102,156 @@ class _AddBalanceScreenState extends State<AddBalanceScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  void _showPaymentWaitingDialog(String reference, double amount) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.payment, color: Color(0xFF6B46C1)),
+              SizedBox(width: 12),
+              Text('Waiting for Payment'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Complete the payment in your browser',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Amount: ${amount.toStringAsFixed(2)} ETB',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'This dialog will close automatically once payment is confirmed',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close dialog
+                context.pop(true); // Return to wallet with refresh flag
+              },
+              child: const Text('I\'ve Completed Payment'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close dialog
+                context.pop(false); // Return to wallet without refresh
+              },
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Start polling for payment verification
+    _pollPaymentStatus(reference);
+  }
+
+  Future<void> _pollPaymentStatus(String reference) async {
+    int attempts = 0;
+    const maxAttempts = 30; // Poll for 1 minute (30 * 2 seconds)
+    
+    while (attempts < maxAttempts && mounted) {
+      await Future.delayed(const Duration(seconds: 2));
+      
+      try {
+        final result = await _walletService.verifyTopUp(reference);
+        
+        if (result['success']) {
+          final status = result['data']['status'];
+          
+          if (status == 'success') {
+            // Payment successful!
+            if (mounted) {
+              Navigator.pop(context); // Close waiting dialog
+              
+              // Show success message
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Payment successful! Balance updated.'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              
+              // Return to wallet with refresh flag
+              context.pop(true);
+            }
+            return;
+          } else if (status == 'failed') {
+            // Payment failed
+            if (mounted) {
+              Navigator.pop(context); // Close waiting dialog
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Payment failed. Please try again.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              
+              context.pop(false);
+            }
+            return;
+          }
+          // If status is 'pending', continue polling
+        }
+      } catch (e) {
+        print('Error polling payment status: $e');
+      }
+      
+      attempts++;
+    }
+    
+    // Timeout - payment status unknown
+    if (mounted) {
+      Navigator.pop(context); // Close waiting dialog
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Payment Status Unknown'),
+          content: const Text(
+            'We couldn\'t verify your payment status. Please check your wallet balance or contact support if the amount was deducted.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close this dialog
+                context.pop(true); // Return to wallet with refresh
+              },
+              child: const Text('Check Wallet'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
