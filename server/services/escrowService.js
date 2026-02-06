@@ -1,5 +1,6 @@
 const Booking = require('../models/Booking');
 const notificationService = require('./notificationService');
+const walletService = require('./walletService');
 const cron = require('node-cron');
 
 class EscrowService {
@@ -81,7 +82,27 @@ class EscrowService {
   // Release escrow for a specific booking
   async releaseEscrow(booking) {
     try {
-      // Release the escrow
+      // Check if payment was made with wallet
+      const isWalletPayment = booking.payment?.method === 'wallet';
+
+      if (isWalletPayment) {
+        // Release from student's escrow to tutor's wallet
+        const releaseResult = await walletService.releaseFromEscrow(
+          booking.studentId._id || booking.studentId,
+          booking.tutorId._id || booking.tutorId,
+          booking.tutorEarnings || booking.totalAmount,
+          booking._id,
+          `Session completed - ${booking.subject}`
+        );
+
+        if (!releaseResult.success) {
+          throw new Error(`Failed to release escrow to wallet: ${releaseResult.error}`);
+        }
+
+        console.log(`💰 Wallet escrow released: ETB ${booking.tutorEarnings} to tutor ${booking.tutorId._id}`);
+      }
+
+      // Release the escrow in booking
       await booking.releaseEscrow();
 
       // Notify tutor about payment
@@ -91,18 +112,13 @@ class EscrowService {
         bookingId: booking._id
       });
 
-      // In a real implementation, trigger actual payout here
-      // Examples:
-      // - Stripe transfer to tutor's connected account
-      // - Bank transfer via payment gateway
-      // - Add to tutor's wallet balance for withdrawal
-
-      console.log(`💰 Escrow released: ETB ${booking.tutorEarnings} to tutor ${booking.tutorId._id}`);
+      console.log(`✅ Escrow released for booking ${booking._id}`);
 
       return {
         success: true,
         bookingId: booking._id,
-        amount: booking.tutorEarnings
+        amount: booking.tutorEarnings,
+        method: isWalletPayment ? 'wallet' : 'chapa'
       };
     } catch (error) {
       console.error('Release escrow error:', error);
@@ -229,6 +245,7 @@ class EscrowService {
 
       // Calculate refund amount based on cancellation timing
       const refundCalculation = this.calculateRefundAmount(booking);
+      const isWalletPayment = booking.payment?.method === 'wallet';
 
       // Update booking with refund information
       booking.refundAmount = refundCalculation.refundAmount;
@@ -249,17 +266,39 @@ class EscrowService {
       booking.escrow.releasedAt = new Date();
       await booking.save();
 
+      // Process wallet refund if payment was made with wallet
+      if (isWalletPayment && refundCalculation.refundAmount > 0) {
+        const refundResult = await walletService.refundFromEscrow(
+          booking.studentId._id,
+          refundCalculation.refundAmount,
+          booking._id,
+          `Refund for cancelled session - ${refundCalculation.refundPercentage}%`
+        );
+
+        if (!refundResult.success) {
+          throw new Error(`Failed to refund to wallet: ${refundResult.error}`);
+        }
+
+        console.log(`💸 Wallet refund: ETB ${refundCalculation.refundAmount} to student ${booking.studentId._id}`);
+      }
+
       // If partial refund, release remaining amount to tutor
       if (refundCalculation.refundPercentage > 0 && refundCalculation.refundPercentage < 100) {
         const tutorAmount = booking.tutorEarnings * (1 - refundCalculation.refundPercentage / 100);
         
-        // Update tutor balance (move from pending to available)
-        const TutorProfile = require('../models/TutorProfile');
-        const tutorProfile = await TutorProfile.findById(booking.tutorProfileId);
-        if (tutorProfile) {
-          tutorProfile.balance.pending -= booking.tutorEarnings;
-          tutorProfile.balance.available += tutorAmount;
-          await tutorProfile.save();
+        if (isWalletPayment) {
+          // Release remaining amount from escrow to tutor wallet
+          const releaseResult = await walletService.releaseFromEscrow(
+            booking.studentId._id,
+            booking.tutorId._id,
+            tutorAmount,
+            booking._id,
+            `Partial payment for cancelled session - ${100 - refundCalculation.refundPercentage}%`
+          );
+
+          if (!releaseResult.success) {
+            console.error('Failed to release partial amount to tutor:', releaseResult.error);
+          }
         }
 
         // Notify tutor about partial payment
@@ -273,7 +312,9 @@ class EscrowService {
         });
       } else if (refundCalculation.refundPercentage === 0) {
         // No refund - release full amount to tutor
-        await this.releaseEscrow(booking);
+        if (isWalletPayment) {
+          await this.releaseEscrow(booking);
+        }
       }
 
       // Notify student about refund
@@ -282,7 +323,7 @@ class EscrowService {
           userId: booking.studentId._id,
           type: 'payment_refunded',
           title: refundCalculation.refundPercentage === 100 ? 'Full Refund Processed' : 'Partial Refund Processed',
-          body: `ETB ${refundCalculation.refundAmount.toFixed(2)} (${refundCalculation.refundPercentage}%) has been refunded to your account.`,
+          body: `ETB ${refundCalculation.refundAmount.toFixed(2)} (${refundCalculation.refundPercentage}%) has been refunded to your ${isWalletPayment ? 'wallet' : 'account'}.`,
           data: { 
             bookingId: booking._id, 
             reason: refundCalculation.refundReason,
@@ -305,13 +346,7 @@ class EscrowService {
         });
       }
 
-      // In a real implementation, process actual refund here
-      // Examples:
-      // - Stripe refund
-      // - Chapa refund
-      // - Add to student's wallet balance
-
-      console.log(`💸 Escrow refunded: ETB ${refundCalculation.refundAmount} (${refundCalculation.refundPercentage}%) to student ${booking.studentId._id}`);
+      console.log(`✅ Refund processed: ETB ${refundCalculation.refundAmount} (${refundCalculation.refundPercentage}%)`);
       console.log(`   Platform retained: ETB ${refundCalculation.platformFeeRetained}`);
 
       return {
@@ -321,7 +356,8 @@ class EscrowService {
         refundPercentage: refundCalculation.refundPercentage,
         platformFeeRetained: refundCalculation.platformFeeRetained,
         refundedAt: booking.escrow.releasedAt,
-        refundReason: refundCalculation.refundReason
+        refundReason: refundCalculation.refundReason,
+        method: isWalletPayment ? 'wallet' : 'chapa'
       };
     } catch (error) {
       console.error('Refund escrow error:', error);

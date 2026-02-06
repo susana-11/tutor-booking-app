@@ -30,4 +30,7 @@ router.post('/withdraw', walletController.requestWithdrawal);
 // Get withdrawal history
 router.get('/withdrawals', walletController.getWithdrawals);
 
+// Pay for booking with wallet
+router.post('/pay-booking', walletController.payBookingWithWallet);
+
 module.exports = router;

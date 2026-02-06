@@ -482,3 +482,146 @@ exports.getWithdrawals = async (req, res) => {
     });
   }
 };
+
+
+// Pay for booking using wallet
+exports.payBookingWithWallet = async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+    const userId = req.user.userId;
+
+    if (!bookingId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Booking ID is required'
+      });
+    }
+
+    const Booking = require('../models/Booking');
+    const booking = await Booking.findById(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
+    }
+
+    // Verify user is the student
+    if (booking.studentId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    // Check if already paid
+    if (booking.payment?.status === 'paid') {
+      return res.status(400).json({
+        success: false,
+        message: 'Booking already paid'
+      });
+    }
+
+    const amount = booking.payment?.amount || booking.amount;
+
+    // Check sufficient balance
+    const balanceCheck = await walletService.checkSufficientBalance(userId, amount);
+    
+    if (!balanceCheck.success || !balanceCheck.data.hasSufficientBalance) {
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient wallet balance',
+        data: {
+          required: amount,
+          available: balanceCheck.data?.currentBalance || 0,
+          shortfall: balanceCheck.data?.shortfall || amount
+        }
+      });
+    }
+
+    // Move balance to escrow
+    const escrowResult = await walletService.moveToEscrow(
+      userId,
+      amount,
+      bookingId,
+      `Payment for booking ${bookingId}`
+    );
+
+    if (!escrowResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: escrowResult.error
+      });
+    }
+
+    // Update booking payment status
+    booking.payment = {
+      method: 'wallet',
+      status: 'paid',
+      amount: amount,
+      paidAt: new Date(),
+      walletTransactionId: escrowResult.data.transaction._id
+    };
+    booking.status = 'confirmed';
+    booking.paymentStatus = 'paid';
+    await booking.save();
+
+    // Update availability slot status
+    const AvailabilitySlot = require('../models/AvailabilitySlot');
+    const slot = await AvailabilitySlot.findById(booking.slotId);
+    if (slot) {
+      slot.status = 'booked';
+      if (slot.booking) {
+        slot.booking.status = 'confirmed';
+      }
+      await slot.save();
+    }
+
+    // Send notifications
+    await notificationService.createNotification({
+      userId: booking.tutorId,
+      type: 'booking_accepted',
+      title: 'Booking Confirmed',
+      body: `Your session has been confirmed and paid`,
+      data: {
+        bookingId: booking._id,
+        amount
+      }
+    });
+
+    await notificationService.createNotification({
+      userId,
+      type: 'payment_received',
+      title: 'Payment Successful',
+      body: `Payment of ${amount} ETB completed successfully`,
+      data: {
+        bookingId: booking._id,
+        amount
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Booking paid successfully with wallet',
+      data: {
+        bookingId: booking._id,
+        amount,
+        paymentMethod: 'wallet',
+        status: 'confirmed',
+        wallet: {
+          balance: escrowResult.data.wallet.balance,
+          escrowBalance: escrowResult.data.wallet.escrowBalance
+        },
+        transaction: escrowResult.data.transaction
+      }
+    });
+  } catch (error) {
+    console.error('Pay booking with wallet error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to process wallet payment',
+      error: error.message
+    });
+  }
+};
