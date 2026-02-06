@@ -8,6 +8,7 @@ import '../../../core/services/session_service.dart';
 import '../../../core/widgets/session_action_button.dart';
 import '../../../core/widgets/reschedule_request_dialog.dart';
 import '../../../core/widgets/reschedule_requests_dialog.dart';
+import '../../../core/widgets/cancel_booking_dialog.dart';
 
 class TutorBookingsScreen extends StatefulWidget {
   const TutorBookingsScreen({super.key});
@@ -824,14 +825,33 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
             
             const SizedBox(height: AppTheme.spacingSM),
             
-            // View reschedule requests button
-            OutlinedButton.icon(
-              onPressed: () => _viewRescheduleRequests(booking),
-              icon: const Icon(Icons.history, size: 16),
-              label: const Text('View Reschedule Requests', style: TextStyle(fontSize: 12)),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              ),
+            // View reschedule requests and Cancel buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _viewRescheduleRequests(booking),
+                    icon: const Icon(Icons.history, size: 16),
+                    label: const Text('Requests', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppTheme.spacingSM),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _cancelBooking(booking),
+                    icon: const Icon(Icons.cancel, size: 16),
+                    label: const Text('Cancel', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1310,6 +1330,32 @@ class _TutorBookingsScreenState extends State<TutorBookingsScreen>
     // TODO: Navigate to session details screen
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Viewing details for session with ${booking['studentName'] ?? booking['student']?['firstName']}')),
+    );
+  }
+
+  void _cancelBooking(Map<String, dynamic> booking) {
+    // Show cancel booking dialog with 100% refund info for tutors
+    showDialog(
+      context: context,
+      builder: (context) => CancelBookingDialog(
+        bookingId: booking['_id'] ?? booking['id'],
+        bookingDetails: {
+          'sessionDate': booking['sessionDate'],
+          'startTime': booking['startTime'],
+          'totalAmount': booking['totalAmount'] ?? booking['pricePerHour'] ?? 0.0,
+          'isTutor': true, // Flag to show 100% refund message
+        },
+        onCancelled: () {
+          _loadBookings();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Booking cancelled. Student will receive 100% refund.'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        },
+      ),
     );
   }
 

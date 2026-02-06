@@ -558,7 +558,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
               textAlign: TextAlign.center,
             ),
           ],
-        ),
+        ), 
       ),
     );
   }

@@ -32,7 +32,25 @@ class _CancelBookingDialogState extends State<CancelBookingDialog> {
   }
 
   void _calculateRefund() {
-    // Calculate refund based on time until session
+    // Check if this is a tutor cancellation
+    final isTutor = widget.bookingDetails['isTutor'] == true;
+    
+    if (isTutor) {
+      // Tutors always give 100% refund
+      final totalAmount = widget.bookingDetails['totalAmount'] ?? 0.0;
+      setState(() {
+        _refundInfo = {
+          'percentage': 100,
+          'amount': totalAmount,
+          'message': 'Student will receive 100% refund (Tutor cancellation)',
+          'hoursUntilSession': 0,
+          'minutesUntilSession': 0,
+        };
+      });
+      return;
+    }
+    
+    // Calculate refund based on time until session (for students)
     final sessionDate = widget.bookingDetails['sessionDate'];
     final startTime = widget.bookingDetails['startTime'];
     
@@ -295,9 +313,13 @@ class _CancelBookingDialogState extends State<CancelBookingDialog> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '• 1+ hours before: 100% refund\n'
-                        '• 30min - 1hr before: 50% refund\n'
-                        '• Less than 30min: No refund',
+                        widget.bookingDetails['isTutor'] == true
+                            ? '• Tutor cancellations: 100% refund to student\n'
+                              '• Student will be notified immediately\n'
+                              '• Booking slot will become available'
+                            : '• 1+ hours before: 100% refund\n'
+                              '• 30min - 1hr before: 50% refund\n'
+                              '• Less than 30min: No refund',
                         style: TextStyle(
                           fontSize: 11,
                           color: Colors.blue[700],

@@ -104,18 +104,27 @@ class NotificationService {
   // Mark all notifications as read
   Future<ApiResponse<void>> markAllAsRead() async {
     try {
+      print('📧 Marking all notifications as read...');
+      print('📊 Current unread count: $_unreadCount');
+      
       final response = await _apiService.put<void>(
         '/notifications/read-all',
         data: {},
       );
       
       if (response.success) {
+        print('✅ All notifications marked as read on server');
         _unreadCount = 0;
         _notificationCountController.add(_unreadCount);
+        print('📊 Updated unread count to: $_unreadCount');
+        print('📡 Broadcasted count update to stream');
+      } else {
+        print('❌ Failed to mark all as read: ${response.error}');
       }
       
       return response;
     } catch (e) {
+      print('❌ Error marking all as read: $e');
       return ApiResponse.error('Failed to mark all notifications as read: $e');
     }
   }

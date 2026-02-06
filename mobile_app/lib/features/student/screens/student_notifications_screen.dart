@@ -349,8 +349,8 @@ class _StudentNotificationsScreenState extends State<StudentNotificationsScreen>
                       }
                     });
                     
-                    // Refresh unread count after marking all as read
-                    await _notificationService.refreshUnreadCount();
+                    // No need to call refreshUnreadCount() here
+                    // markAllAsRead() already sets count to 0 and broadcasts it
                     
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
