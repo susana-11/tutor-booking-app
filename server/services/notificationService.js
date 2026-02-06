@@ -518,7 +518,20 @@ class NotificationService {
 
   // Delete notification
   async deleteNotification(notificationId, userId) {
-    return Notification.findOneAndDelete({ _id: notificationId, userId });
+    console.log('🗑️ Deleting notification:', {
+      notificationId,
+      userId: userId.toString()
+    });
+    
+    const result = await Notification.findOneAndDelete({ _id: notificationId, userId });
+    
+    if (result) {
+      console.log('✅ Notification deleted successfully:', notificationId);
+    } else {
+      console.log('❌ Notification not found or not owned by user:', notificationId);
+    }
+    
+    return result;
   }
 
   // Register device token
