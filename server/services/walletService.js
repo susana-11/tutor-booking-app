@@ -53,53 +53,89 @@ class WalletService {
 
   // Add balance to wallet (after successful top-up)
   async addBalance(userId, amount, transactionData = {}) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-      const wallet = await Wallet.getOrCreate(userId);
-      const balanceBefore = wallet.balance;
+      // Check if transaction with this chapaReference already exists (idempotency)
+      if (transactionData.chapaReference) {
+        const existingTransaction = await Transaction.findOne({
+          chapaReference: transactionData.chapaReference
+        });
 
-      // Add balance to wallet
-      await wallet.addBalance(amount, transactionData.description || 'Wallet top-up');
-
-      // Create transaction record
-      const transaction = await Transaction.create([{
-        userId,
-        walletId: wallet._id,
-        type: 'wallet_topup',
-        amount,
-        netAmount: amount,
-        status: 'completed',
-        description: transactionData.description || 'Wallet top-up via Chapa',
-        chapaReference: transactionData.chapaReference,
-        chapaTransactionId: transactionData.chapaTransactionId,
-        balanceBefore,
-        balanceAfter: wallet.balance,
-        metadata: transactionData.metadata || {},
-        paidAt: new Date()
-      }], { session });
-
-      await session.commitTransaction();
-
-      console.log(`✅ Added ${amount} ETB to wallet for user ${userId}`);
-
-      return {
-        success: true,
-        data: {
-          wallet,
-          transaction: transaction[0]
+        if (existingTransaction) {
+          console.log(`ℹ️ Transaction with reference ${transactionData.chapaReference} already exists`);
+          
+          // If transaction exists and is completed, return existing data
+          if (existingTransaction.status === 'completed') {
+            const wallet = await Wallet.getOrCreate(userId);
+            console.log(`✅ Returning existing completed transaction for user ${userId}`);
+            
+            return {
+              success: true,
+              data: {
+                wallet,
+                transaction: existingTransaction
+              }
+            };
+          }
+          
+          // If transaction exists but failed, allow retry by deleting old transaction
+          if (existingTransaction.status === 'failed') {
+            console.log(`🔄 Deleting failed transaction to allow retry`);
+            await Transaction.deleteOne({ _id: existingTransaction._id });
+          }
         }
-      };
+      }
+
+      // Proceed with creating new transaction
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        const wallet = await Wallet.getOrCreate(userId);
+        const balanceBefore = wallet.balance;
+
+        // Add balance to wallet
+        await wallet.addBalance(amount, transactionData.description || 'Wallet top-up');
+
+        // Create transaction record
+        const transaction = await Transaction.create([{
+          userId,
+          walletId: wallet._id,
+          type: 'wallet_topup',
+          amount,
+          netAmount: amount,
+          status: 'completed',
+          description: transactionData.description || 'Wallet top-up via Chapa',
+          chapaReference: transactionData.chapaReference,
+          chapaTransactionId: transactionData.chapaTransactionId,
+          balanceBefore,
+          balanceAfter: wallet.balance,
+          metadata: transactionData.metadata || {},
+          paidAt: new Date()
+        }], { session });
+
+        await session.commitTransaction();
+
+        console.log(`✅ Added ${amount} ETB to wallet for user ${userId}`);
+
+        return {
+          success: true,
+          data: {
+            wallet,
+            transaction: transaction[0]
+          }
+        };
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
     } catch (error) {
-      await session.abortTransaction();
       console.error('Add balance error:', error);
       return {
         success: false,
         error: error.message
       };
-    } finally {
-      session.endSession();
     }
   }
 
