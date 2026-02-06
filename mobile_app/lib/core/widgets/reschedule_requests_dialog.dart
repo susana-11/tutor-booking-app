@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../theme/app_theme.dart';
 import '../services/booking_service.dart';
+import '../services/storage_service.dart';
 
 class RescheduleRequestsDialog extends StatefulWidget {
   final Map<String, dynamic> booking;
@@ -22,11 +24,22 @@ class _RescheduleRequestsDialogState extends State<RescheduleRequestsDialog> {
   final BookingService _bookingService = BookingService();
   List<Map<String, dynamic>> _requests = [];
   bool _isLoading = true;
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
+    _loadCurrentUser();
     _loadRequests();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    final user = await StorageService.getUserData();
+    if (user != null && mounted) {
+      setState(() {
+        _currentUserId = user['_id'] ?? user['id'];
+      });
+    }
   }
 
   Future<void> _loadRequests() async {
@@ -216,6 +229,15 @@ class _RescheduleRequestsDialogState extends State<RescheduleRequestsDialog> {
     final isAccepted = status == 'accepted';
     final isRejected = status == 'rejected';
     
+    // Check if current user is the requester
+    final requestedBy = request['requestedBy']?.toString();
+    final isRequester = requestedBy != null && requestedBy == _currentUserId;
+    
+    // Only show accept/reject buttons if:
+    // 1. Request is pending
+    // 2. Current user is NOT the requester
+    final canRespond = isPending && !isRequester;
+    
     Color statusColor = isPending
         ? Colors.orange
         : isAccepted
@@ -341,8 +363,8 @@ class _RescheduleRequestsDialogState extends State<RescheduleRequestsDialog> {
               ),
             ],
             
-            // Action buttons (only for pending requests)
-            if (isPending) ...[
+            // Action buttons (only for pending requests where current user is NOT the requester)
+            if (canRespond) ...[
               const SizedBox(height: AppTheme.spacingMD),
               Row(
                 children: [
@@ -370,6 +392,39 @@ class _RescheduleRequestsDialogState extends State<RescheduleRequestsDialog> {
                     ),
                   ),
                 ],
+              ),
+            ],
+            
+            // Show "Waiting for response" message if current user is the requester
+            if (isPending && isRequester) ...[
+              const SizedBox(height: AppTheme.spacingMD),
+              Container(
+                padding: const EdgeInsets.all(AppTheme.spacingSM),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.hourglass_empty,
+                      size: 16,
+                      color: Colors.blue[700],
+                    ),
+                    const SizedBox(width: AppTheme.spacingXS),
+                    Expanded(
+                      child: Text(
+                        'Waiting for the other party to respond',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
             
