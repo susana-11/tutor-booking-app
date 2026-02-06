@@ -178,6 +178,7 @@ exports.getTutorBookingRequests = async (req, res) => {
       .sort({ createdAt: -1 });
 
     const formattedRequests = bookings.map(booking => ({
+      _id: booking._id,
       id: booking._id,
       studentId: booking.studentId._id,
       studentName: `${booking.studentId.firstName} ${booking.studentId.lastName}`,
@@ -204,7 +205,13 @@ exports.getTutorBookingRequests = async (req, res) => {
       pricePerHour: booking.pricePerHour,
       status: booking.status,
       paymentStatus: booking.paymentStatus || booking.payment?.status,
+      payment: booking.payment,
       rescheduleRequests: booking.rescheduleRequests || [],
+      hasReview: booking.hasReview || false,
+      sessionStartedAt: booking.sessionStartedAt,
+      session: booking.session,
+      checkIn: booking.checkIn,
+      meetingLink: booking.meetingLink,
       requestedAt: booking.createdAt
     }));
 
@@ -242,6 +249,7 @@ exports.getStudentBookings = async (req, res) => {
       .sort({ sessionDate: 1 });
 
     const formattedBookings = bookings.map(booking => ({
+      _id: booking._id,
       id: booking._id,
       tutorId: booking.tutorId._id,
       tutorName: `${booking.tutorId.firstName} ${booking.tutorId.lastName}`,
@@ -249,13 +257,23 @@ exports.getStudentBookings = async (req, res) => {
       tutorPhone: booking.tutorId.phone,
       slotId: booking.slotId,
       sessionDate: booking.sessionDate,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
       timeSlot: booking.timeSlot,
-      subject: booking.subject,
+      subject: booking.subject?.name || booking.subject,
       amount: booking.amount,
+      totalAmount: booking.totalAmount,
+      pricePerHour: booking.pricePerHour,
       status: booking.status,
+      paymentStatus: booking.paymentStatus,
+      payment: booking.payment,
       notes: booking.notes,
       meetingLink: booking.meetingLink,
       rescheduleRequests: booking.rescheduleRequests || [],
+      hasReview: booking.hasReview || false,
+      sessionStartedAt: booking.sessionStartedAt,
+      session: booking.session,
+      checkIn: booking.checkIn,
       createdAt: booking.createdAt,
       updatedAt: booking.updatedAt
     }));
