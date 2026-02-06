@@ -451,8 +451,10 @@ class _TutorMessagesScreenState extends State<TutorMessagesScreen> {
   }
 
   String _formatTime(DateTime timestamp) {
+    // Convert to local time if it's UTC
+    final localTimestamp = timestamp.isUtc ? timestamp.toLocal() : timestamp;
     final now = DateTime.now();
-    final difference = now.difference(timestamp);
+    final difference = now.difference(localTimestamp);
 
     if (difference.inMinutes < 1) {
       return 'Just now';
@@ -463,7 +465,7 @@ class _TutorMessagesScreenState extends State<TutorMessagesScreen> {
     } else if (difference.inDays < 7) {
       return '${difference.inDays}d ago';
     } else {
-      return '${timestamp.day}/${timestamp.month}';
+      return '${localTimestamp.day}/${localTimestamp.month}';
     }
   }
 

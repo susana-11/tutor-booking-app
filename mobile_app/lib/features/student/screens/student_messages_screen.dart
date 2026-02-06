@@ -776,8 +776,10 @@ class _StudentMessagesScreenState extends State<StudentMessagesScreen> with Tick
   }
 
   String _formatTime(DateTime dateTime) {
+    // Convert to local time if it's UTC
+    final localDateTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
     final now = DateTime.now();
-    final difference = now.difference(dateTime);
+    final difference = now.difference(localDateTime);
 
     if (difference.inDays > 0) {
       return '${difference.inDays}d ago';

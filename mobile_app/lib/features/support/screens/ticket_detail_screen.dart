@@ -442,8 +442,10 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   }
 
   String _formatTime(DateTime date) {
+    // Convert to local time if it's UTC
+    final localDate = date.isUtc ? date.toLocal() : date;
     final now = DateTime.now();
-    final difference = now.difference(date);
+    final difference = now.difference(localDate);
 
     if (difference.inDays == 0) {
       if (difference.inHours == 0) {
@@ -453,7 +455,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     } else if (difference.inDays < 7) {
       return '${difference.inDays}d ago';
     } else {
-      return '${date.day}/${date.month}/${date.year}';
+      return '${localDate.day}/${localDate.month}/${localDate.year}';
     }
   }
 }

@@ -805,8 +805,10 @@ class _TutorDetailScreenState extends State<TutorDetailScreen> {
   }
 
   String _getTimeAgo(DateTime dateTime) {
+    // Convert to local time if it's UTC
+    final localDateTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
     final now = DateTime.now();
-    final difference = now.difference(dateTime);
+    final difference = now.difference(localDateTime);
     
     if (difference.inDays > 365) {
       final years = (difference.inDays / 365).floor();

@@ -182,8 +182,10 @@ class _TutorNotificationsScreenState extends State<TutorNotificationsScreen>
     
     try {
       final dateTime = DateTime.parse(timestamp);
+      // Convert to local time if it's UTC
+      final localDateTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
       final now = DateTime.now();
-      final difference = now.difference(dateTime);
+      final difference = now.difference(localDateTime);
       
       if (difference.inDays > 7) {
         return '${(difference.inDays / 7).floor()} week${difference.inDays > 13 ? 's' : ''} ago';
