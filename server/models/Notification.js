@@ -28,6 +28,8 @@ const notificationSchema = new mongoose.Schema({
       'call_missed',
       'payment_received',
       'payment_pending',
+      'payment_refunded',
+      'cancellation_no_refund',
       'profile_approved',
       'profile_rejected',
       'system_announcement'
