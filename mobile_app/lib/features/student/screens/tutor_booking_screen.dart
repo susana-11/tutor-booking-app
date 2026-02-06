@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/socket_service.dart';
 import '../../../core/services/booking_service.dart';
+import '../../../core/services/wallet_service.dart';
 import '../../tutor/models/availability_model.dart';
 import '../../tutor/services/availability_service.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -42,11 +43,13 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
   
   final AvailabilityService _availabilityService = AvailabilityService();
   final SocketService _socketService = SocketService();
+  final WalletService _walletService = WalletService();
   final TextEditingController _notesController = TextEditingController();
   
   List<AvailabilitySlot> _availableSlots = [];
   bool _isLoading = true;
   bool _isBooking = false;
+  double _walletBalance = 0.0;
   
   // Duration options
   final List<double> _durationOptions = [1.0, 1.5, 2.0];
@@ -56,6 +59,20 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadAvailableSlots();
+    _loadWalletBalance();
+  }
+
+  Future<void> _loadWalletBalance() async {
+    try {
+      final result = await _walletService.getWalletBalance();
+      if (result['success'] && mounted) {
+        setState(() {
+          _walletBalance = (result['data']['balance'] ?? 0).toDouble();
+        });
+      }
+    } catch (e) {
+      print('Error loading wallet balance: $e');
+    }
   }
 
   Future<void> _loadAvailableSlots() async {
@@ -1056,11 +1073,11 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
           
           const SizedBox(height: AppTheme.spacingXL),
           
-          // Book Now Button
+          // Payment Method Selection
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _isBooking ? null : _bookSession,
+              onPressed: _isBooking ? null : _showPaymentMethodDialog,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
                 foregroundColor: Colors.white,
@@ -1090,6 +1107,311 @@ class _TutorBookingScreenState extends State<TutorBookingScreen>
         ],
       ),
     );
+  }
+
+  void _showPaymentMethodDialog() {
+    final totalAmount = _getSelectedHourlyRate() * _selectedDuration;
+    final hasEnoughBalance = _walletBalance >= totalAmount;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(AppTheme.spacingLG),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Choose Payment Method',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingLG),
+            
+            // Wallet Balance Display
+            Container(
+              padding: const EdgeInsets.all(AppTheme.spacingMD),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Wallet Balance:',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    '${_walletBalance.toStringAsFixed(2)} ETB',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: hasEnoughBalance ? Colors.green : Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingLG),
+            
+            // Pay with Wallet
+            _buildPaymentMethodTile(
+              icon: Icons.account_balance_wallet,
+              title: 'Pay with Wallet',
+              subtitle: hasEnoughBalance 
+                  ? 'Fast and secure payment'
+                  : 'Insufficient balance',
+              enabled: hasEnoughBalance,
+              onTap: hasEnoughBalance ? () {
+                Navigator.pop(context);
+                _bookSessionWithWallet();
+              } : null,
+            ),
+            
+            const SizedBox(height: AppTheme.spacingSM),
+            
+            // Pay with Chapa
+            _buildPaymentMethodTile(
+              icon: Icons.credit_card,
+              title: 'Pay with Chapa',
+              subtitle: 'Credit/Debit card or mobile money',
+              enabled: true,
+              onTap: () {
+                Navigator.pop(context);
+                _bookSession();
+              },
+            ),
+            
+            if (!hasEnoughBalance) ...[
+              const SizedBox(height: AppTheme.spacingMD),
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.push('/wallet/add-balance');
+                },
+                icon: const Icon(Icons.add_circle),
+                label: const Text('Add Money to Wallet'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                ),
+              ),
+            ],
+            
+            const SizedBox(height: AppTheme.spacingMD),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentMethodTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool enabled,
+    required VoidCallback? onTap,
+  }) {
+    return Material(
+      color: enabled ? Colors.white : Colors.grey[200],
+      borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+        child: Container(
+          padding: const EdgeInsets.all(AppTheme.spacingMD),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: enabled ? AppTheme.primaryColor.withOpacity(0.3) : Colors.grey[300]!,
+            ),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: enabled 
+                      ? AppTheme.primaryColor.withOpacity(0.1)
+                      : Colors.grey[300],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: enabled ? AppTheme.primaryColor : Colors.grey,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: AppTheme.spacingMD),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        color: enabled ? Colors.black87 : Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: enabled ? Colors.grey[600] : Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: enabled ? Colors.grey[400] : Colors.grey[300],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _bookSessionWithWallet() async {
+    if (_selectedSlot == null || _selectedSessionType == null) return;
+
+    setState(() => _isBooking = true);
+
+    try {
+      final user = context.read<AuthProvider>().user;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final subjectIdentifier = widget.subjectId.isNotEmpty 
+          ? widget.subjectId 
+          : widget.subject;
+
+      final hourlyRate = _getSelectedHourlyRate();
+      final totalAmount = hourlyRate * _selectedDuration;
+
+      print('🔍 Creating booking with wallet payment:');
+      print('  - Total Amount: $totalAmount ETB');
+      print('  - Wallet Balance: $_walletBalance ETB');
+
+      // Create booking via API
+      final bookingService = BookingService();
+      final response = await bookingService.createBooking(
+        tutorId: widget.tutorId,
+        subjectId: subjectIdentifier,
+        date: _selectedSlot!.date,
+        startTime: _selectedSlot!.timeSlot.startTime,
+        endTime: _selectedSlot!.timeSlot.endTime,
+        mode: _selectedSessionType!,
+        duration: _selectedDuration,
+        totalAmount: totalAmount,
+        location: _selectedSessionType == 'offline' ? _getMeetingLocationText() : null,
+        message: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+      );
+
+      if (response.success) {
+        final booking = response.data?['booking'] ?? response.data ?? {};
+        final bookingId = booking['_id'] ?? booking['id'];
+        
+        print('✅ Booking created: $bookingId');
+        print('💰 Processing wallet payment...');
+
+        // Pay with wallet
+        final paymentResult = await _walletService.payBookingWithWallet(bookingId);
+
+        if (paymentResult['success']) {
+          print('✅ Wallet payment successful!');
+          
+          if (mounted) {
+            // Show success dialog
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                title: const Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 32),
+                    SizedBox(width: 12),
+                    Text('Booking Confirmed!'),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Your session has been booked and paid successfully.'),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green[50],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Payment Details',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green[700],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text('Amount: ${totalAmount.toStringAsFixed(2)} ETB'),
+                          Text('Method: Wallet'),
+                          Text('Status: Paid'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context); // Close dialog
+                      context.go('/student-bookings'); // Go to bookings
+                    },
+                    child: const Text('View My Bookings'),
+                  ),
+                ],
+              ),
+            );
+          }
+        } else {
+          throw Exception(paymentResult['error'] ?? 'Wallet payment failed');
+        }
+      } else {
+        throw Exception(response.error ?? 'Failed to create booking');
+      }
+
+    } catch (e) {
+      print('❌ Error booking session with wallet: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to book session: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isBooking = false);
+      }
+    }
   }
 
   Widget _buildSummaryRow(String label, String value, {bool isTotal = false}) {

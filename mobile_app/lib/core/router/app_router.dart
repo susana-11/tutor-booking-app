@@ -41,6 +41,9 @@ import '../../features/support/screens/my_tickets_screen.dart';
 import '../../features/support/screens/ticket_detail_screen.dart';
 import '../../features/support/screens/faq_screen.dart';
 import '../../features/session/screens/active_session_screen.dart';
+import '../../features/wallet/screens/wallet_screen.dart';
+import '../../features/wallet/screens/add_balance_screen.dart';
+import '../../features/wallet/screens/transaction_history_screen.dart';
 
 class AppRouter {
   static final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -303,6 +306,23 @@ class AppRouter {
         path: '/support/faqs',
         name: 'faqs',
         builder: (context, state) => const FAQScreen(),
+      ),
+      
+      // Wallet Routes
+      GoRoute(
+        path: '/wallet',
+        name: 'wallet',
+        builder: (context, state) => const WalletScreen(),
+      ),
+      GoRoute(
+        path: '/wallet/add-balance',
+        name: 'add-balance',
+        builder: (context, state) => const AddBalanceScreen(),
+      ),
+      GoRoute(
+        path: '/wallet/transactions',
+        name: 'transaction-history',
+        builder: (context, state) => const TransactionHistoryScreen(),
       ),
     ],
   );

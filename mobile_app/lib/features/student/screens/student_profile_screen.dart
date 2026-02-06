@@ -7,6 +7,7 @@ import 'dart:math' as math;
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/profile_service.dart';
+import '../../../core/services/wallet_service.dart';
 import '../../../core/providers/theme_provider.dart';
 import '../../../core/widgets/change_password_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -23,6 +24,7 @@ class StudentProfileScreen extends StatefulWidget {
 class _StudentProfileScreenState extends State<StudentProfileScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final ProfileService _profileService = ProfileService();
+  final WalletService _walletService = WalletService();
   final ImagePicker _imagePicker = ImagePicker();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -33,6 +35,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
   List<String> _selectedSubjects = [];
   String _preferredMode = 'Both';
   bool _isUploadingImage = false;
+  bool _isLoadingWallet = true;
+  double _walletBalance = 0.0;
+  double _escrowBalance = 0.0;
   
   AnimationController? _fadeController;
   AnimationController? _floatController;
@@ -69,6 +74,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
     super.initState();
     _initializeAnimations();
     _loadUserData();
+    _loadWalletBalance();
   }
 
   void _initializeAnimations() {
@@ -105,6 +111,26 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
     }
   }
 
+  Future<void> _loadWalletBalance() async {
+    setState(() => _isLoadingWallet = true);
+    
+    try {
+      final result = await _walletService.getWalletBalance();
+      if (result['success'] && mounted) {
+        setState(() {
+          _walletBalance = (result['data']['balance'] ?? 0).toDouble();
+          _escrowBalance = (result['data']['escrowBalance'] ?? 0).toDouble();
+        });
+      }
+    } catch (e) {
+      print('Error loading wallet balance: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingWallet = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -134,6 +160,11 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
                       _buildModernProfileHeader(isDark),
                       
                       const SizedBox(height: AppTheme.spacingXL),
+                      
+                      // Wallet Balance Card
+                      _buildWalletCard(isDark),
+                      
+                      const SizedBox(height: AppTheme.spacingLG),
                       
                       // Personal Information Card
                       _buildModernCard(
@@ -273,6 +304,14 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
                         child: Column(
                           children: [
                             _buildModernThemeToggle(isDark),
+                            const SizedBox(height: AppTheme.spacingSM),
+                            _buildModernSettingsTile(
+                              icon: Icons.account_balance_wallet_rounded,
+                              title: 'My Wallet',
+                              subtitle: 'Manage your wallet and transactions',
+                              isDark: isDark,
+                              onTap: () => context.push('/wallet'),
+                            ),
                             const SizedBox(height: AppTheme.spacingSM),
                             _buildModernSettingsTile(
                               icon: Icons.notifications_rounded,
@@ -563,6 +602,210 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> with Ticker
           ),
         );
       },
+    );
+  }
+
+  Widget _buildWalletCard(bool isDark) {
+    return GestureDetector(
+      onTap: () => context.push('/wallet'),
+      child: Container(
+        padding: const EdgeInsets.all(AppTheme.spacingLG),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF6B46C1),
+              Color(0xFF805AD5),
+              Color(0xFF38B2AC),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF6B46C1).withOpacity(0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.account_balance_wallet_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'My Wallet',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: Colors.white.withOpacity(0.7),
+                  size: 16,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppTheme.spacingLG),
+            if (_isLoadingWallet)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+              )
+            else ...[
+              Text(
+                'Available Balance',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${_walletBalance.toStringAsFixed(2)} ETB',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (_escrowBalance > 0) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.lock_rounded,
+                            color: Colors.white.withOpacity(0.9),
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'In Escrow',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        '${_escrowBalance.toStringAsFixed(2)} ETB',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.add_circle_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Add Money',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.history_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'History',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
