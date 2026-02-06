@@ -628,8 +628,8 @@ exports.getBookingDetails = async (req, res) => {
     }
 
     // Check if user is authorized to view
-    const isStudent = booking.studentId._id.toString() === userId;
-    const isTutor = booking.tutorId._id.toString() === userId;
+    const isStudent = booking.studentId._id.toString() === userId.toString();
+    const isTutor = booking.tutorId._id.toString() === userId.toString();
 
     if (!isStudent && !isTutor) {
       return res.status(403).json({
@@ -819,7 +819,7 @@ exports.processPayment = async (req, res) => {
     }
 
     // Check if user is the student
-    if (booking.studentId.toString() !== req.user.userId) {
+    if (booking.studentId.toString() !== req.user.userId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to pay for this booking'
@@ -1325,8 +1325,8 @@ exports.getRescheduleRequests = async (req, res) => {
     }
 
     // Check if user is authorized
-    const isStudent = booking.studentId._id.toString() === req.user.userId;
-    const isTutor = booking.tutorId._id.toString() === req.user.userId;
+    const isStudent = booking.studentId._id.toString() === req.user.userId.toString();
+    const isTutor = booking.tutorId._id.toString() === req.user.userId.toString();
 
     if (!isStudent && !isTutor) {
       return res.status(403).json({
