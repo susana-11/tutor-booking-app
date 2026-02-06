@@ -929,8 +929,17 @@ exports.requestReschedule = async (req, res) => {
     }
 
     // Check if user is authorized
-    const isStudent = booking.studentId._id.toString() === req.user.userId;
-    const isTutor = booking.tutorId._id.toString() === req.user.userId;
+    const isStudent = booking.studentId._id.toString() === req.user.userId.toString();
+    const isTutor = booking.tutorId._id.toString() === req.user.userId.toString();
+
+    console.log('🔐 Reschedule authorization check:', {
+      bookingId: booking._id.toString(),
+      studentId: booking.studentId._id.toString(),
+      tutorId: booking.tutorId._id.toString(),
+      requestUserId: req.user.userId.toString(),
+      isStudent,
+      isTutor
+    });
 
     if (!isStudent && !isTutor) {
       return res.status(403).json({
@@ -1117,9 +1126,21 @@ exports.respondToRescheduleRequest = async (req, res) => {
     }
 
     // Check if user is authorized (must be the other party, not the requester)
-    const isStudent = booking.studentId._id.toString() === req.user.userId;
-    const isTutor = booking.tutorId._id.toString() === req.user.userId;
-    const isRequester = rescheduleRequest.requestedBy.toString() === req.user.userId;
+    const isStudent = booking.studentId._id.toString() === req.user.userId.toString();
+    const isTutor = booking.tutorId._id.toString() === req.user.userId.toString();
+    const isRequester = rescheduleRequest.requestedBy.toString() === req.user.userId.toString();
+
+    console.log('🔐 Reschedule response authorization check:', {
+      bookingId: booking._id.toString(),
+      requestId: requestId,
+      studentId: booking.studentId._id.toString(),
+      tutorId: booking.tutorId._id.toString(),
+      requesterId: rescheduleRequest.requestedBy.toString(),
+      responseUserId: req.user.userId.toString(),
+      isStudent,
+      isTutor,
+      isRequester
+    });
 
     if (!isStudent && !isTutor) {
       return res.status(403).json({
