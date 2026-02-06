@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const walletController = require('../controllers/walletController');
-const { protect } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 
 // All routes require authentication
-router.use(protect);
+router.use(authenticate);
 
 // Get wallet balance
 router.get('/balance', walletController.getWalletBalance);
