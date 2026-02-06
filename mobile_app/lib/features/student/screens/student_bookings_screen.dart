@@ -790,32 +790,105 @@ class _StudentBookingsScreenState extends State<StudentBookingsScreen>
 
   Widget _buildActionButtons(Map<String, dynamic> booking, bool isUpcoming, String status, String? meetingLink) {
     final paymentStatus = booking['paymentStatus'] ?? booking['payment']?['status'] ?? 'pending';
+    final hasPendingRescheduleRequests = (booking['rescheduleRequests'] as List?)
+        ?.any((req) => req['status'] == 'pending') ?? false;
+    
+    // Debug logging
+    print('🔍 Booking ${booking['_id'] ?? booking['id']}:');
+    print('   Status: $status');
+    print('   Payment Status: $paymentStatus');
+    print('   Reschedule Requests: ${booking['rescheduleRequests']}');
+    print('   Has Pending: $hasPendingRescheduleRequests');
+    print('   Is Upcoming: $isUpcoming');
+    
+    // Helper widget for reschedule banner
+    Widget buildRescheduleBanner() {
+      if (!hasPendingRescheduleRequests) return const SizedBox.shrink();
+      
+      return Container(
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFf59e0b), Color(0xFFd97706)],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFf59e0b).withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.schedule_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'You have pending reschedule requests',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => _viewRescheduleRequests(booking),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.white.withOpacity(0.2),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'View',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     
     // Show Pay Now button for pending payment
     if (isUpcoming && paymentStatus == 'pending') {
-      return Row(
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _payForBooking(booking),
-              icon: const Icon(Icons.payment, size: 16),
-              label: const Text('Pay Now'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
+          buildRescheduleBanner(),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _payForBooking(booking),
+                  icon: const Icon(Icons.payment, size: 16),
+                  label: const Text('Pay Now'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: AppTheme.spacingSM),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _cancelSession(booking),
-              icon: const Icon(Icons.cancel, size: 16),
-              label: const Text('Cancel'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
+              const SizedBox(width: AppTheme.spacingSM),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _cancelSession(booking),
+                  icon: const Icon(Icons.cancel, size: 16),
+                  label: const Text('Cancel'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       );
@@ -825,6 +898,8 @@ class _StudentBookingsScreenState extends State<StudentBookingsScreen>
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          buildRescheduleBanner(),
+          
           // Session Action Button (Start/Join Session)
           SessionActionButton(
             booking: booking,
@@ -913,13 +988,19 @@ class _StudentBookingsScreenState extends State<StudentBookingsScreen>
         ],
       );
     } else if (isUpcoming && status == 'pending') {
-      return OutlinedButton.icon(
-        onPressed: () => _cancelSession(booking),
-        icon: const Icon(Icons.cancel, size: 16),
-        label: const Text('Cancel Request'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.red,
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          buildRescheduleBanner(),
+          OutlinedButton.icon(
+            onPressed: () => _cancelSession(booking),
+            icon: const Icon(Icons.cancel, size: 16),
+            label: const Text('Cancel Request'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+          ),
+        ],
       );
     }
     
