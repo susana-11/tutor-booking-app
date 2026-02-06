@@ -174,6 +174,7 @@ exports.getTutorBookingRequests = async (req, res) => {
 
     const bookings = await Booking.find(filter)
       .populate('studentId', 'firstName lastName email phone')
+      .populate('rescheduleRequests.requestedBy', 'firstName lastName')
       .sort({ createdAt: -1 });
 
     const formattedRequests = bookings.map(booking => ({
@@ -203,6 +204,7 @@ exports.getTutorBookingRequests = async (req, res) => {
       pricePerHour: booking.pricePerHour,
       status: booking.status,
       paymentStatus: booking.paymentStatus || booking.payment?.status,
+      rescheduleRequests: booking.rescheduleRequests || [],
       requestedAt: booking.createdAt
     }));
 
@@ -236,6 +238,7 @@ exports.getStudentBookings = async (req, res) => {
 
     const bookings = await Booking.find(filter)
       .populate('tutorId', 'firstName lastName email phone')
+      .populate('rescheduleRequests.requestedBy', 'firstName lastName')
       .sort({ sessionDate: 1 });
 
     const formattedBookings = bookings.map(booking => ({
@@ -252,6 +255,7 @@ exports.getStudentBookings = async (req, res) => {
       status: booking.status,
       notes: booking.notes,
       meetingLink: booking.meetingLink,
+      rescheduleRequests: booking.rescheduleRequests || [],
       createdAt: booking.createdAt,
       updatedAt: booking.updatedAt
     }));
