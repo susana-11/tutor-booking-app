@@ -844,10 +844,10 @@ exports.deleteAvailabilitySlot = async (req, res) => {
       }
     }
 
-    // Soft delete
+    // Soft delete - disable validation to avoid sessionTypes error
     slot.isActive = false;
     slot.lastModifiedBy = tutorId;
-    await slot.save();
+    await slot.save({ validateBeforeSave: false });
 
     res.json({
       success: true,
