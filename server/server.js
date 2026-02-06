@@ -21,6 +21,7 @@ const bookingsEnhancedRoutes = require('./routes/bookingsEnhanced');
 const availabilityRoutes = require('./routes/availability');
 const paymentRoutes = require('./routes/payments');
 const withdrawalRoutes = require('./routes/withdrawals');
+const walletRoutes = require('./routes/wallet');
 const reviewRoutes = require('./routes/reviews');
 const chatRoutes = require('./routes/chat');
 const adminRoutes = require('./routes/admin');
@@ -167,6 +168,7 @@ app.use('/api/bookings-enhanced', bookingsEnhancedRoutes); // Enhanced booking f
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
+app.use('/api/wallet', walletRoutes); // Wallet routes
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/admin', adminRoutes);

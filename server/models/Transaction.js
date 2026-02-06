@@ -7,9 +7,14 @@ const transactionSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  walletId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Wallet',
+    index: true
+  },
   type: {
     type: String,
-    enum: ['payment', 'withdrawal', 'refund', 'platform_fee'],
+    enum: ['payment', 'withdrawal', 'refund', 'platform_fee', 'wallet_topup', 'wallet_deduction', 'wallet_refund', 'escrow_hold', 'escrow_release'],
     required: true,
     index: true
   },
@@ -37,6 +42,13 @@ const transactionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Booking',
     index: true
+  },
+  // Wallet balance tracking
+  balanceBefore: Number,
+  balanceAfter: Number,
+  relatedTransactionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Transaction'
   },
   // Chapa specific fields
   chapaReference: {
